@@ -1,0 +1,1096 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <title>Camera Flip Backend</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #0f172a;
+    }
+    header {
+      background: #020617;
+      color: white;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    header h1 {
+      font-size: 18px;
+      margin: 0;
+    }
+    .nav {
+      display: flex;
+      gap: 8px;
+    }
+    .nav button {
+      background: transparent;
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,0.8);
+      color: #e5e7eb;
+      padding: 4px 10px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .nav button.active {
+      background: #22c55e;
+      border-color: #22c55e;
+      color: #022c22;
+    }
+
+    .page {
+      max-width: 1200px;
+      margin: 16px auto;
+      padding: 0 12px 32px;
+    }
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 10px 40px rgba(15,23,42,0.20);
+    }
+    h2 {
+      margin-top: 0;
+      font-size: 18px;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: 6px 8px;
+      margin-top: 3px;
+      border-radius: 6px;
+      border: 1px solid #e5e7eb;
+      font-size: 13px;
+    }
+    textarea {
+      resize: vertical;
+      min-height: 60px;
+    }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .col-3 { flex: 0 0 calc(25% - 8px); }
+    .col-4 { flex: 0 0 calc(33.333% - 8px); }
+    .col-6 { flex: 0 0 calc(50% - 8px); }
+    .col-12 { flex: 0 0 100%; }
+
+    button {
+      padding: 7px 14px;
+      border-radius: 999px;
+      border: none;
+      font-size: 13px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .btn-primary {
+      background: #22c55e;
+      color: #022c22;
+    }
+    .btn-outline {
+      background: white;
+      color: #0f172a;
+      border: 1px solid #cbd5f5;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    th, td {
+      padding: 6px 8px;
+      border-bottom: 1px solid #e5e7eb;
+      text-align: left;
+    }
+    th {
+      background: #eff6ff;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      background: #e5e7eb;
+    }
+    .tag.ready { background:#dcfce7; color:#166534; }
+    .tag.repair { background:#fef9c3; color:#92400e; }
+    .tag.sold { background:#e0f2fe; color:#075985; }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit,minmax(200px,1fr));
+      gap: 12px;
+    }
+    .stat-card {
+      background: #020617;
+      color:#e5e7eb;
+      border-radius: 12px;
+      padding: 12px 14px;
+      position: relative;
+      overflow:hidden;
+    }
+    .stat-label { font-size:12px; color:#9ca3af; }
+    .stat-value { font-size:22px; margin-top:4px; }
+    .stat-sub { font-size:11px; color:#9ca3af; margin-top:2px; }
+
+    @media (max-width: 768px) {
+      .col-3, .col-4, .col-6 { flex: 0 0 100%; }
+      header h1 { font-size: 16px; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Camera Flip Backend</h1>
+  <div class="nav">
+    <button data-page="dashboard" class="active">Dashboard</button>
+    <button data-page="inventory">สต็อก</button>
+    <button data-page="sales">ขาย</button>
+    <button data-page="purchases">ซื้อของเข้า</button>
+    <button data-page="repairs">ซ่อม & อะไหล่</button>
+    <button data-page="cash">เงินสด & หนี้</button>
+  </div>
+</header>
+
+<div id="page-dashboard" class="page">
+  <div class="card" style="background:transparent; box-shadow:none; padding:0;">
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label">ของค้างสต็อก (ชิ้น)</div>
+        <div class="stat-value" id="stat-stock-count">-</div>
+        <div class="stat-sub">ชิ้นที่ยังไม่ขาย</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">มูลค่าต้นทุนสต็อก</div>
+        <div class="stat-value" id="stat-stock-value">-</div>
+        <div class="stat-sub">บาท</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">กำไรเดือนนี้</div>
+        <div class="stat-value" id="stat-profit-month">-</div>
+        <div class="stat-sub">บาท (จากสินค้าที่ขายแล้ว)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">กำไรรวมทั้งหมด</div>
+        <div class="stat-value" id="stat-profit-total">-</div>
+        <div class="stat-sub">บาท</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">เงินสดคงเหลือในร้าน</div>
+        <div class="stat-value" id="stat-cash">-</div>
+        <div class="stat-sub">รวมทุกบัญชี (ตาม CashMovements)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>กำไรต่อเดือน</h2>
+    <canvas id="chart-profit-month"></canvas>
+  </div>
+</div>
+
+<!-- INVENTORY -->
+<div id="page-inventory" class="page" style="display:none;">
+  <div class="card">
+    <h2>เพิ่มสินค้าเข้าสต็อก</h2>
+    <div class="row">
+      <div class="col-3">
+        <label>หมวดหมู่
+          <select id="inv-category">
+            <option value="Camera Body">Camera Body</option>
+            <option value="Lens">Lens</option>
+            <option value="Flash">Flash</option>
+            <option value="Accessory">Accessory</option>
+          </select>
+        </label>
+      </div>
+      <div class="col-3">
+        <label>ยี่ห้อ (Brand)
+          <input id="inv-brand" placeholder="Canon / Sony / Sigma" />
+        </label>
+      </div>
+      <div class="col-3">
+        <label>รุ่น (Model)
+          <input id="inv-model" placeholder="1DX II / 5D4 / ฯลฯ" />
+        </label>
+      </div>
+      <div class="col-3">
+        <label>Serial Number
+          <input id="inv-sn" />
+        </label>
+      </div>
+
+      <div class="col-3">
+        <label>สภาพ (A / B+ / ตำหนิ)
+          <input id="inv-condition" />
+        </label>
+      </div>
+      <div class="col-3">
+        <label>Status
+          <select id="inv-status">
+            <option value="รอเช็ค">รอเช็ค</option>
+            <option value="รอซ่อม">รอซ่อม</option>
+            <option value="พร้อมขาย">พร้อมขาย</option>
+          </select>
+        </label>
+      </div>
+      <div class="col-3">
+        <label>ต้นทุนซื้อ (base_cost)
+          <input id="inv-base-cost" type="number" step="0.01" />
+        </label>
+      </div>
+      <div class="col-3">
+        <label>ค่าซ่อมเริ่มต้น (repair_cost)
+          <input id="inv-repair-cost" type="number" step="0.01" value="0" />
+        </label>
+      </div>
+
+      <div class="col-3">
+        <label>ค่าอื่นๆ (ค่าส่ง ฯลฯ)
+          <input id="inv-other-cost" type="number" step="0.01" value="0" />
+        </label>
+      </div>
+      <div class="col-3">
+        <label>ราคาตั้งขาย (list_price)
+          <input id="inv-list-price" type="number" step="0.01" />
+        </label>
+      </div>
+      <div class="col-3">
+        <label>วันที่รับของ (YYYY-MM-DD)
+          <input id="inv-received-at" />
+        </label>
+      </div>
+    </div>
+    <br>
+    <button class="btn-primary" id="btn-inv-add">บันทึกสินค้า</button>
+    <span id="msg-inv" style="font-size:13px;margin-left:8px;"></span>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h2>รายการสต็อก</h2>
+      <button class="btn-outline" id="btn-inv-reload">รีเฟรช</button>
+    </div>
+    <div id="inv-summary" style="font-size:13px;margin-bottom:8px;"></div>
+    <div style="max-height:420px;overflow:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>สินค้า</th>
+            <th>SN</th>
+            <th>สภาพ</th>
+            <th>Status</th>
+            <th>ต้นทุน</th>
+            <th>ตั้งขาย</th>
+            <th>ขายจริง</th>
+            <th>รับของ</th>
+            <th>ขาย</th>
+            <th>กำไร</th>
+            <th>แก้ไข</th>
+          </tr>
+        </thead>
+        <tbody id="inv-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- SALES -->
+<div id="page-sales" class="page" style="display:none;">
+  <div class="card">
+    <h2>ออกบิลขายแบบเร็ว</h2>
+    <p style="font-size:13px;">(เลือก item_id จากสต็อก → กรอกราคาขาย → กดบันทึก)</p>
+    <div class="row">
+      <div class="col-3">
+        <label>วันที่ขาย
+          <input id="sale-date" placeholder="2025-11-20" />
+        </label>
+      </div>
+      <div class="col-3">
+        <label>ชื่อลูกค้า
+          <input id="sale-customer" />
+        </label>
+      </div>
+      <div class="col-3">
+        <label>ช่องทาง
+          <input id="sale-channel" placeholder="FB / Shopee / หน้าร้าน" />
+        </label>
+      </div>
+      <div class="col-3">
+        <label>วิธีจ่าย
+          <input id="sale-payment" placeholder="โอน / สด / COD" />
+        </label>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-4">
+        <label>เลขพัสดุส่งลูกค้า
+          <input id="sale-tracking" />
+        </label>
+      </div>
+      <div class="col-4">
+        <label>ค่าส่ง (บวก/ลบรวมในเงินที่ได้)
+          <input id="sale-ship" type="number" step="0.01" value="0" />
+        </label>
+      </div>
+      <div class="col-4">
+        <label>ค่าธรรมเนียมแพลตฟอร์ม
+          <input id="sale-fee" type="number" step="0.01" value="0" />
+        </label>
+      </div>
+    </div>
+
+    <hr style="margin:12px 0;">
+
+    <div class="row">
+      <div class="col-4">
+        <label>Item ID
+          <input id="sale-item-id" placeholder="เช่น ITM-.... (ดูจากตารางสต็อก)" />
+        </label>
+      </div>
+      <div class="col-4">
+        <label>ราคาขายจริง (ต่อชิ้น)
+          <input id="sale-price" type="number" step="0.01" />
+        </label>
+      </div>
+      <div class="col-4">
+        <label>ส่วนลด
+          <input id="sale-discount" type="number" step="0.01" value="0" />
+        </label>
+      </div>
+    </div>
+    <br>
+    <button class="btn-primary" id="btn-sale-submit">บันทึกการขาย</button>
+    <span id="msg-sale" style="font-size:13px;margin-left:8px;"></span>
+  </div>
+
+  <div class="card">
+    <h2>ประวัติการขาย (ล่าสุด)</h2>
+    <div style="max-height:420px;overflow:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>วันที่</th>
+            <th>บิล</th>
+            <th>ลูกค้า</th>
+            <th>ช่องทาง</th>
+            <th>จำนวนสินค้า</th>
+            <th>ยอดรวมขาย</th>
+          </tr>
+        </thead>
+        <tbody id="sales-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- PURCHASES -->
+<div id="page-purchases" class="page" style="display:none;">
+  <div class="card">
+    <h2>บันทึกการซื้อของเข้า</h2>
+    <div class="row">
+      <div class="col-3">
+        <label>วันที่ซื้อ
+          <input id="pur-date" />
+        </label>
+      </div>
+      <div class="col-3">
+        <label>ชื่อผู้ขาย
+          <input id="pur-seller" />
+        </label>
+      </div>
+      <div class="col-3">
+        <label>ช่องทาง
+          <input id="pur-channel" placeholder="FB กลุ่ม / Marketplace ฯลฯ" />
+        </label>
+      </div>
+      <div class="col-3">
+        <label>วิธีจ่าย
+          <input id="pur-payment" placeholder="โอน / สด" />
+        </label>
+      </div>
+
+      <div class="col-3">
+        <label>จ่ายจากบัญชี
+          <input id="pur-account" placeholder="MAIN / KBank ฯลฯ" />
+        </label>
+      </div>
+      <div class="col-3">
+        <label>ยอดรวมที่จ่าย
+          <input id="pur-amount" type="number" step="0.01" />
+        </label>
+      </div>
+      <div class="col-3">
+        <label>เลขพัสดุขาเข้า
+          <input id="pur-track" />
+        </label>
+      </div>
+      <div class="col-3">
+        <label>โน้ต
+          <input id="pur-note" />
+        </label>
+      </div>
+    </div>
+    <br>
+    <button class="btn-primary" id="btn-pur-submit">บันทึกการซื้อ</button>
+    <span id="msg-pur" style="font-size:13px;margin-left:8px;"></span>
+  </div>
+
+  <div class="card">
+    <h2>ประวัติการซื้อ</h2>
+    <div style="max-height:420px;overflow:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>วันที่</th>
+            <th>ID</th>
+            <th>ผู้ขาย</th>
+            <th>ช่องทาง</th>
+            <th>ยอดรวม</th>
+            <th>เลขพัสดุ</th>
+          </tr>
+        </thead>
+        <tbody id="pur-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- REPAIRS -->
+<div id="page-repairs" class="page" style="display:none;">
+  <div class="card">
+    <h2>บันทึกงานซ่อม</h2>
+    <div class="row">
+      <div class="col-3">
+        <label>Item ID ที่ซ่อม
+          <input id="rep-item-id" />
+        </label>
+      </div>
+      <div class="col-3">
+        <label>วันที่ส่งซ่อม
+          <input id="rep-send" />
+        </label>
+      </div>
+      <div class="col-3">
+        <label>วันที่ซ่อมเสร็จ
+          <input id="rep-done" />
+        </label>
+      </div>
+      <div class="col-3">
+        <label>ร้านซ่อม / ซ่อมเอง
+          <input id="rep-shop" />
+        </label>
+      </div>
+
+      <div class="col-6">
+        <label>อาการสินค้า
+          <input id="rep-problem" />
+        </label>
+      </div>
+      <div class="col-6">
+        <label>วิธีซ่อม / สิ่งที่ทำ
+          <input id="rep-actions" />
+        </label>
+      </div>
+
+      <div class="col-3">
+        <label>ค่าแรงช่าง
+          <input id="rep-labor" type="number" step="0.01" value="0" />
+        </label>
+      </div>
+      <div class="col-3">
+        <label>Part ID (อะไหล่หลัก 1 ชิ้น เช่น ม่าน ฯลฯ)
+          <input id="rep-part-id" />
+        </label>
+      </div>
+      <div class="col-3">
+        <label>จำนวนอะไหล่ที่ใช้
+          <input id="rep-part-qty" type="number" step="1" value="0" />
+        </label>
+      </div>
+    </div>
+    <br>
+    <button class="btn-primary" id="btn-rep-submit">บันทึกการซ่อม</button>
+    <span id="msg-rep" style="font-size:13px;margin-left:8px;"></span>
+  </div>
+
+  <div class="card">
+    <h2>อะไหล่ในสต็อก</h2>
+    <div class="row">
+      <div class="col-4">
+        <label>ชื่ออะไหล่
+          <input id="part-name" />
+        </label>
+      </div>
+      <div class="col-4">
+        <label>รุ่นที่ใช้ได้ (โน้ต)
+          <input id="part-models" />
+        </label>
+      </div>
+      <div class="col-2">
+        <label>จำนวนเริ่มต้น
+          <input id="part-qty" type="number" />
+        </label>
+      </div>
+      <div class="col-2">
+        <label>ต้นทุน/ชิ้น
+          <input id="part-cost" type="number" step="0.01" />
+        </label>
+      </div>
+    </div>
+    <br>
+    <button class="btn-primary" id="btn-part-submit">เพิ่มอะไหล่ใหม่</button>
+    <span id="msg-part" style="font-size:13px;margin-left:8px;"></span>
+
+    <hr style="margin:12px 0;">
+
+    <div style="max-height:320px;overflow:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Part ID</th>
+            <th>ชื่ออะไหล่</th>
+            <th>รุ่นที่ใช้ได้</th>
+            <th>คงเหลือ</th>
+            <th>ต้นทุน/ชิ้น</th>
+          </tr>
+        </thead>
+        <tbody id="parts-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- CASH & LOANS -->
+<div id="page-cash" class="page" style="display:none;">
+  <div class="card">
+    <h2>สรุปเงินสด & หนี้ (อ่านอย่างเดียว จาก Dashboard/CashMovements)</h2>
+    <p style="font-size:13px;">
+      ยอดเงินสดคงเหลือและหนี้สินทั้งหมดคุณดูจาก Dashboard Summary และชีต CashMovements / Loans โดยตรงได้เลย<br>
+      ถ้าอยากเพิ่มเงินกู้ / กู้เงิน: ใช้ฟอร์มด้านล่าง
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>บันทึกเงินกู้ใหม่</h2>
+    <div class="row">
+      <div class="col-3">
+        <label>ชื่อเจ้าหนี้
+          <input id="loan-lender" placeholder="แม่ / เพื่อน / ธนาคาร" />
+        </label>
+      </div>
+      <div class="col-3">
+        <label>วันที่กู้
+          <input id="loan-date" />
+        </label>
+      </div>
+      <div class="col-3">
+        <label>ยอดเงินกู้ (Principal)
+          <input id="loan-amount" type="number" step="0.01" />
+        </label>
+      </div>
+      <div class="col-3">
+        <label>ดอกเบี้ย (% ต่อปี หรือแล้วแต่คุณนิยาม)
+          <input id="loan-rate" type="number" step="0.01" />
+        </label>
+      </div>
+      <div class="col-3">
+        <label>ยอดผ่อนต่องวด (ถ้ามี)
+          <input id="loan-install" type="number" step="0.01" />
+        </label>
+      </div>
+      <div class="col-9">
+        <label>โน้ต
+          <input id="loan-note" />
+        </label>
+      </div>
+    </div>
+    <br>
+    <button class="btn-primary" id="btn-loan-submit">บันทึกเงินกู้</button>
+    <span id="msg-loan" style="font-size:13px;margin-left:8px;"></span>
+  </div>
+
+  <div class="card">
+    <h2>รายการเงินกู้</h2>
+    <div style="max-height:320px;overflow:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>เจ้าหนี้</th>
+            <th>วันที่เริ่ม</th>
+            <th>ยอดกู้</th>
+            <th>ยอดคงเหลือ</th>
+            <th>ดอกเบี้ย</th>
+          </tr>
+        </thead>
+        <tbody id="loans-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  // *** เปลี่ยนเป็น URL ของเว็บแอป Apps Script คุณเอง ***
+  const API_BASE_URL = 'https://script.google.com/macros/s/AKfycbwqsk-kJBiV85mh1Y7gnQ2npnJvvMuwWMWt83JZ2k73JS2IivSPP9e6oTaVz-cyeyMqcQ/exec';
+
+
+  async function apiGet(params) {
+    const url = new URL(API_BASE_URL);
+    Object.entries(params).forEach(([k,v]) => url.searchParams.set(k,v));
+    const res = await fetch(url.toString());
+    return res.json();
+  }
+  async function apiPost(action, data) {
+    const url = new URL(API_BASE_URL);
+    url.searchParams.set('action', action);
+    const res = await fetch(url.toString(), {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(data)
+    });
+    return res.json();
+  }
+  function money(n) {
+    const num = Number(n || 0);
+    if (isNaN(num)) return '-';
+    return num.toLocaleString('th-TH', {maximumFractionDigits:0});
+  }
+  function tagClass(status) {
+    if (!status) return 'tag';
+    if (status.includes('ขาย')) return 'tag sold';
+    if (status.includes('ซ่อม')) return 'tag repair';
+    if (status.includes('พร้อม')) return 'tag ready';
+    return 'tag';
+  }
+
+  // NAV
+  document.querySelectorAll('.nav button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const page = btn.dataset.page;
+      document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
+      document.getElementById('page-' + page).style.display = 'block';
+    });
+  });
+
+  /******** DASHBOARD ********/
+  let profitChart;
+  async function loadDashboard() {
+    try {
+      const res = await apiGet({action:'dashboardSummary'});
+      if (!res.ok) throw new Error(res.error || 'error');
+      const d = res.data;
+      document.getElementById('stat-stock-count').textContent = d.stockCount;
+      document.getElementById('stat-stock-value').textContent = money(d.stockValue);
+      document.getElementById('stat-profit-month').textContent = money(d.profitThisMonth);
+      document.getElementById('stat-profit-total').textContent = money(d.profitTotal);
+      document.getElementById('stat-cash').textContent = money(d.cashBalance);
+
+      const labels = d.profitByMonth.map(x => x.month);
+      const values = d.profitByMonth.map(x => x.profit);
+
+      const ctx = document.getElementById('chart-profit-month').getContext('2d');
+      if (profitChart) profitChart.destroy();
+      profitChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'กำไรต่อเดือน (บาท)',
+            data: values
+          }]
+        },
+        options: {
+          responsive:true,
+          scales:{ y:{ beginAtZero:true } }
+        }
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  /******** INVENTORY ********/
+  async function loadInventory() {
+    const tbody = document.getElementById('inv-tbody');
+    tbody.innerHTML = '<tr><td colspan="12">Loading...</td></tr>';
+    try {
+      const res = await apiGet({action:'listItems'});
+      if (!res.ok) throw new Error(res.error || 'error');
+      const items = res.data || [];
+
+      let stockCount = 0, stockValue = 0, profitTotal = 0;
+      tbody.innerHTML = '';
+
+      items.forEach(it => {
+        const cost = Number(it.total_cost || 0);
+        const sold = Number(it.sold_price || 0);
+        let pf = 0;
+        if (!sold) {
+          stockCount++;
+          stockValue += cost;
+        } else {
+          pf = sold - cost;
+          profitTotal += pf;
+        }
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${it.id}</td>
+          <td><strong>${it.brand || ''} ${it.model || ''}</strong><br><span style="font-size:11px;">${it.category || ''}</span></td>
+          <td>${it.sn || ''}</td>
+          <td>${it.condition || ''}</td>
+          <td><span class="${tagClass(it.status)}">${it.status || ''}</span></td>
+          <td>${money(cost)}</td>
+          <td>${money(it.list_price)}</td>
+          <td>${money(it.sold_price)}</td>
+          <td>${it.received_at || ''}</td>
+          <td>${it.sold_at || ''}</td>
+          <td style="color:${pf>0?'green':(pf<0?'red':'#555')}">${sold?money(pf):'-'}</td>
+          <td><button class="btn-outline" style="font-size:11px;" onclick="editItemPrompt('${it.id}')">แก้ไข</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById('inv-summary').innerHTML =
+        `ของค้างสต็อก <strong>${stockCount}</strong> ชิ้น | มูลค่าต้นทุน <strong>${money(stockValue)}</strong> บาท | กำไรจากของที่ขายแล้ว <strong>${money(profitTotal)}</strong> บาท`;
+    } catch (err) {
+      tbody.innerHTML = '<tr><td colspan="12">Error: '+err.message+'</td></tr>';
+    }
+  }
+
+  async function addInventoryItem() {
+    const payload = {
+      category: document.getElementById('inv-category').value,
+      brand: document.getElementById('inv-brand').value,
+      model: document.getElementById('inv-model').value,
+      sn: document.getElementById('inv-sn').value,
+      condition: document.getElementById('inv-condition').value,
+      status: document.getElementById('inv-status').value,
+      base_cost: document.getElementById('inv-base-cost').value,
+      repair_cost: document.getElementById('inv-repair-cost').value,
+      other_cost: document.getElementById('inv-other-cost').value,
+      list_price: document.getElementById('inv-list-price').value,
+      received_at: document.getElementById('inv-received-at').value
+    };
+    const msg = document.getElementById('msg-inv');
+    msg.textContent = 'กำลังบันทึก...';
+    try {
+      const res = await apiPost('createItem', payload);
+      if (!res.ok) throw new Error(res.error || 'error');
+      msg.textContent = 'บันทึกสำเร็จ';
+      setTimeout(()=>msg.textContent='',2000);
+      await loadInventory();
+      await loadDashboard();
+    } catch (err) {
+      msg.textContent = 'Error: '+err.message;
+    }
+  }
+
+  async function editItemPrompt(id) {
+    try {
+      const res = await apiGet({action:'getItem', id});
+      if (!res.ok || !res.data) { alert('โหลดข้อมูลไม่สำเร็จ'); return; }
+      const it = res.data;
+      const newStatus = prompt('Status ใหม่ (Cancel = ไม่เปลี่ยน)', it.status || '');
+      const soldPrice = prompt('ราคาขายจริง (ว่าง = ยังไม่ขาย)', it.sold_price || '');
+      let soldAt = it.sold_at || '';
+      if (soldPrice && soldPrice !== '0') {
+        soldAt = prompt('วันที่ขาย (YYYY-MM-DD)', soldAt || '');
+      }
+      const payload = { id: it.id };
+      if (newStatus !== null) payload.status = newStatus;
+      if (soldPrice !== null) payload.sold_price = soldPrice;
+      if (soldAt !== null) payload.sold_at = soldAt;
+      const res2 = await apiPost('updateItem', payload);
+      if (!res2.ok) throw new Error(res2.error || 'error');
+      await loadInventory();
+      await loadDashboard();
+    } catch (err) {
+      alert('Error: '+err.message);
+    }
+  }
+
+  /******** SALES ********/
+  async function loadSales() {
+    const tbody = document.getElementById('sales-tbody');
+    tbody.innerHTML = '<tr><td colspan="6">Loading...</td></tr>';
+    try {
+      const res = await apiGet({action:'listSales'});
+      if (!res.ok) throw new Error(res.error || 'error');
+      const sales = (res.data || []).slice().reverse().slice(0,50);
+      tbody.innerHTML = '';
+      sales.forEach(s => {
+        let total = 0;
+        const items = s.items || [];
+        items.forEach(i => total += Number(i.selling_price || 0) - Number(i.discount || 0));
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${s.sale_date || ''}</td>
+          <td>${s.id}</td>
+          <td>${s.customer_name || ''}</td>
+          <td>${s.channel || ''}</td>
+          <td>${items.length}</td>
+          <td>${money(total)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    } catch (err) {
+      tbody.innerHTML = '<tr><td colspan="6">Error: '+err.message+'</td></tr>';
+    }
+  }
+
+  async function submitSale() {
+    const payload = {
+      sale_date: document.getElementById('sale-date').value,
+      customer_name: document.getElementById('sale-customer').value,
+      customer_contact: '',
+      channel: document.getElementById('sale-channel').value,
+      payment_method: document.getElementById('sale-payment').value,
+      shipping_tracking: document.getElementById('sale-tracking').value,
+      shipping_cost: document.getElementById('sale-ship').value,
+      platform_fee: document.getElementById('sale-fee').value,
+      items: [{
+        item_id: document.getElementById('sale-item-id').value,
+        selling_price: document.getElementById('sale-price').value,
+        discount: document.getElementById('sale-discount').value
+      }]
+    };
+    const msg = document.getElementById('msg-sale');
+    msg.textContent = 'กำลังบันทึก...';
+    try {
+      const res = await apiPost('createSale', payload);
+      if (!res.ok) throw new Error(res.error || 'error');
+      msg.textContent = 'บันทึกการขายสำเร็จ';
+      setTimeout(()=>msg.textContent='',2000);
+      await loadSales();
+      await loadInventory();
+      await loadDashboard();
+    } catch (err) {
+      msg.textContent = 'Error: '+err.message;
+    }
+  }
+
+  /******** PURCHASES ********/
+  async function loadPurchases() {
+    const tbody = document.getElementById('pur-tbody');
+    tbody.innerHTML = '<tr><td colspan="6">Loading...</td></tr>';
+    try {
+      const res = await apiGet({action:'listPurchases'});
+      if (!res.ok) throw new Error(res.error || 'error');
+      const data = (res.data || []).slice().reverse().slice(0,50);
+      tbody.innerHTML = '';
+      data.forEach(p => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${p.purchase_date || ''}</td>
+          <td>${p.id}</td>
+          <td>${p.seller_name || ''}</td>
+          <td>${p.source_channel || ''}</td>
+          <td>${money(p.total_amount)}</td>
+          <td>${p.tracking_in || ''}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    } catch (err) {
+      tbody.innerHTML = '<tr><td colspan="6">Error: '+err.message+'</td></tr>';
+    }
+  }
+
+  async function submitPurchase() {
+    const payload = {
+      purchase_date: document.getElementById('pur-date').value,
+      seller_name: document.getElementById('pur-seller').value,
+      seller_contact: '',
+      source_channel: document.getElementById('pur-channel').value,
+      payment_method: document.getElementById('pur-payment').value,
+      paid_from_account: document.getElementById('pur-account').value || 'MAIN',
+      total_amount: document.getElementById('pur-amount').value,
+      tracking_in: document.getElementById('pur-track').value,
+      note: document.getElementById('pur-note').value
+    };
+    const msg = document.getElementById('msg-pur');
+    msg.textContent = 'กำลังบันทึก...';
+    try {
+      const res = await apiPost('createPurchase', payload);
+      if (!res.ok) throw new Error(res.error || 'error');
+      msg.textContent = 'บันทึกการซื้อสำเร็จ';
+      setTimeout(()=>msg.textContent='',2000);
+      await loadPurchases();
+      await loadDashboard();
+    } catch (err) {
+      msg.textContent = 'Error: '+err.message;
+    }
+  }
+
+  /******** PARTS & REPAIRS ********/
+  async function loadParts() {
+    const tbody = document.getElementById('parts-tbody');
+    tbody.innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
+    try {
+      const res = await apiGet({action:'listParts'});
+      if (!res.ok) throw new Error(res.error || 'error');
+      const parts = res.data || [];
+      tbody.innerHTML = '';
+      parts.forEach(p => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${p.id}</td>
+          <td>${p.part_name || ''}</td>
+          <td>${p.compatible_models || ''}</td>
+          <td>${p.stock_qty || 0}</td>
+          <td>${money(p.unit_cost)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    } catch (err) {
+      tbody.innerHTML = '<tr><td colspan="5">Error: '+err.message+'</td></tr>';
+    }
+  }
+
+  async function submitPart() {
+    const payload = {
+      part_name: document.getElementById('part-name').value,
+      compatible_models: document.getElementById('part-models').value,
+      stock_qty: document.getElementById('part-qty').value,
+      unit_cost: document.getElementById('part-cost').value
+    };
+    const msg = document.getElementById('msg-part');
+    msg.textContent = 'กำลังบันทึก...';
+    try {
+      const res = await apiPost('createPart', payload);
+      if (!res.ok) throw new Error(res.error || 'error');
+      msg.textContent = 'เพิ่มอะไหล่สำเร็จ';
+      setTimeout(()=>msg.textContent='',2000);
+      await loadParts();
+    } catch (err) {
+      msg.textContent = 'Error: '+err.message;
+    }
+  }
+
+  async function submitRepair() {
+    const payload = {
+      item_id: document.getElementById('rep-item-id').value,
+      problem_description: document.getElementById('rep-problem').value,
+      repair_actions: document.getElementById('rep-actions').value,
+      labor_cost: document.getElementById('rep-labor').value,
+      repair_shop: document.getElementById('rep-shop').value,
+      send_date: document.getElementById('rep-send').value,
+      done_date: document.getElementById('rep-done').value,
+      parts: []
+    };
+    const partId = document.getElementById('rep-part-id').value;
+    const qty = Number(document.getElementById('rep-part-qty').value || 0);
+    if (partId && qty > 0) {
+      payload.parts.push({ part_id: partId, qty });
+    }
+    const msg = document.getElementById('msg-rep');
+    msg.textContent = 'กำลังบันทึก...';
+    try {
+      const res = await apiPost('createRepair', payload);
+      if (!res.ok) throw new Error(res.error || 'error');
+      msg.textContent = 'บันทึกงานซ่อมสำเร็จ';
+      setTimeout(()=>msg.textContent='',2000);
+      await loadInventory();
+      await loadParts();
+      await loadDashboard();
+    } catch (err) {
+      msg.textContent = 'Error: '+err.message;
+    }
+  }
+
+  /******** LOANS ********/
+  async function loadLoans() {
+    const tbody = document.getElementById('loans-tbody');
+    tbody.innerHTML = '<tr><td colspan="6">Loading...</td></tr>';
+    try {
+      const res = await apiGet({action:'listLoans'});
+      if (!res.ok) throw new Error(res.error || 'error');
+      const loans = res.data || [];
+      tbody.innerHTML = '';
+      loans.forEach(l => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${l.id}</td>
+          <td>${l.lender_name || ''}</td>
+          <td>${l.start_date || ''}</td>
+          <td>${money(l.principal_amount)}</td>
+          <td>${money(l.remaining_balance)}</td>
+          <td>${l.interest_rate || 0}%</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    } catch (err) {
+      tbody.innerHTML = '<tr><td colspan="6">Error: '+err.message+'</td></tr>';
+    }
+  }
+
+  async function submitLoan() {
+    const payload = {
+      lender_name: document.getElementById('loan-lender').value,
+      start_date: document.getElementById('loan-date').value,
+      principal_amount: document.getElementById('loan-amount').value,
+      interest_rate: document.getElementById('loan-rate').value,
+      installment_amount: document.getElementById('loan-install').value,
+      note: document.getElementById('loan-note').value
+    };
+    const msg = document.getElementById('msg-loan');
+    msg.textContent = 'กำลังบันทึก...';
+    try {
+      const res = await apiPost('createLoan', payload);
+      if (!res.ok) throw new Error(res.error || 'error');
+      msg.textContent = 'บันทึกเงินกู้สำเร็จ';
+      setTimeout(()=>msg.textContent='',2000);
+      await loadLoans();
+      await loadDashboard();
+    } catch (err) {
+      msg.textContent = 'Error: '+err.message;
+    }
+  }
+
+  // EVENT BIND
+  document.getElementById('btn-inv-add').addEventListener('click', addInventoryItem);
+  document.getElementById('btn-inv-reload').addEventListener('click', loadInventory);
+  document.getElementById('btn-sale-submit').addEventListener('click', submitSale);
+  document.getElementById('btn-pur-submit').addEventListener('click', submitPurchase);
+  document.getElementById('btn-part-submit').addEventListener('click', submitPart);
+  document.getElementById('btn-rep-submit').addEventListener('click', submitRepair);
+  document.getElementById('btn-loan-submit').addEventListener('click', submitLoan);
+
+  // INITIAL LOAD
+  (async function init() {
+    await loadDashboard();
+    await loadInventory();
+    await loadSales();
+    await loadPurchases();
+    await loadParts();
+    await loadLoans();
+  })();
+</script>
+</body>
+</html>
