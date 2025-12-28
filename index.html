@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8" />
-  <title>Camera Flip Backend - ปรับปรุง</title>
+  <title>Camera Flip Backend - Complete</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
@@ -114,6 +114,22 @@
       color: #0f172a;
       border: 1px solid #cbd5f5;
     }
+    .btn-danger {
+      background: #ef4444;
+      color: white;
+    }
+    .btn-warning {
+      background: #f59e0b;
+      color: white;
+    }
+    .btn-info {
+      background: #3b82f6;
+      color: white;
+    }
+    .btn-sm {
+      padding: 4px 10px;
+      font-size: 11px;
+    }
 
     table {
       width: 100%;
@@ -142,6 +158,8 @@
     .tag.ready { background:#dcfce7; color:#166534; }
     .tag.repair { background:#fef9c3; color:#92400e; }
     .tag.sold { background:#e0f2fe; color:#075985; }
+    .tag.returned { background:#fecaca; color:#991b1b; }
+    .tag.returned-seller { background:#fde047; color:#854d0e; }
 
     .stat-grid {
       display: grid;
@@ -181,11 +199,70 @@
       to { transform: translateX(0); opacity: 1; }
     }
 
+    /* Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.5);
+      animation: fadeIn 0.2s;
+    }
+    .modal.show { display: flex; align-items: center; justify-content: center; }
+    .modal-content {
+      background-color: white;
+      padding: 20px;
+      border-radius: 12px;
+      max-width: 500px;
+      width: 90%;
+      max-height: 90vh;
+      overflow-y: auto;
+      animation: slideUp 0.3s;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes slideUp {
+      from { transform: translateY(50px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .modal-header h3 {
+      margin: 0;
+      font-size: 18px;
+    }
+    .close-modal {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: #6b7280;
+      padding: 0;
+      width: 30px;
+      height: 30px;
+    }
+    .modal-footer {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 16px;
+    }
+
     /* Filter Tabs */
     .filter-tabs {
       display: flex;
       gap: 8px;
       margin-bottom: 12px;
+      flex-wrap: wrap;
     }
     .filter-tabs button {
       padding: 6px 12px;
@@ -228,10 +305,6 @@
     .autocomplete-items div:hover {
       background-color: #f3f4f6;
     }
-    .autocomplete-active {
-      background-color: #3b82f6 !important;
-      color: white;
-    }
 
     /* Loading Spinner */
     .spinner {
@@ -248,10 +321,18 @@
       100% { transform: rotate(360deg); }
     }
 
+    /* Action buttons group */
+    .action-btns {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
     @media (max-width: 768px) {
       .col-3, .col-4, .col-6 { flex: 0 0 100%; }
       header h1 { font-size: 16px; }
       .toast { right: 10px; left: 10px; max-width: none; }
+      .modal-content { width: 95%; padding: 16px; }
     }
   </style>
 </head>
@@ -270,6 +351,177 @@
 
 <!-- Toast Notification -->
 <div id="toast" class="toast"></div>
+
+<!-- Edit Item Modal -->
+<div id="modal-edit-item" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>แก้ไขสินค้า</h3>
+      <button class="close-modal" onclick="closeModal('modal-edit-item')">&times;</button>
+    </div>
+    <div id="edit-item-form">
+      <input type="hidden" id="edit-item-id">
+      <label>Status
+        <select id="edit-status">
+          <option value="รอเช็ค">รอเช็ค</option>
+          <option value="รอซ่อม">รอซ่อม</option>
+          <option value="พร้อมขาย">พร้อมขาย</option>
+          <option value="ขายแล้ว">ขายแล้ว</option>
+          <option value="คืนลูกค้า">คืนลูกค้า</option>
+          <option value="คืนผู้ขาย">คืนผู้ขาย</option>
+        </select>
+      </label>
+      <label>ราคาขายจริง (ว่าง = ยังไม่ขาย)
+        <input id="edit-sold-price" type="number" step="0.01">
+      </label>
+      <label>วันที่ขาย
+        <input id="edit-sold-at" type="text" placeholder="YYYY-MM-DD">
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-outline" onclick="closeModal('modal-edit-item')">ยกเลิก</button>
+      <button class="btn-primary" onclick="saveItemEdit()">บันทึก</button>
+    </div>
+  </div>
+</div>
+
+<!-- Return to Customer Modal -->
+<div id="modal-return-customer" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>🔄 คืนสินค้า (ลูกค้าคืนเพราะมีปัญหา)</h3>
+      <button class="close-modal" onclick="closeModal('modal-return-customer')">&times;</button>
+    </div>
+    <div>
+      <p style="font-size:13px;color:#6b7280;">สินค้า: <strong id="return-cust-item-name"></strong></p>
+      <p style="font-size:13px;color:#6b7280;">ต้นทุนเดิม: <strong id="return-cust-item-cost"></strong> บาท</p>
+      <p style="font-size:13px;color:#6b7280;">ขายไปที่: <strong id="return-cust-sold-price"></strong> บาท</p>
+      
+      <label>เหตุผลที่คืน
+        <textarea id="return-cust-reason" placeholder="เช่น: ม่านเสีย, Sensor มีปัญหา, ฯลฯ"></textarea>
+      </label>
+      <label>วันที่คืน
+        <input id="return-cust-date" type="text">
+      </label>
+      <label>สถานะหลังคืน
+        <select id="return-cust-new-status">
+          <option value="รอเช็ค">รอเช็ค</option>
+          <option value="รอซ่อม">รอซ่อม</option>
+          <option value="คืนลูกค้า">คืนลูกค้า (ไม่ใช้ต่อ)</option>
+        </select>
+      </label>
+      <label>คืนเงินลูกค้า (บาท)
+        <input id="return-cust-refund-amount" type="number" step="0.01" placeholder="จำนวนเงินที่คืนให้ลูกค้า">
+      </label>
+      <div style="margin-top:12px;padding:8px;background:#fef3c7;border-radius:6px;font-size:13px;">
+        💡 <strong>หมายเหตุ:</strong> ระบบจะอัพเดท status และเคลียร์ข้อมูลการขาย (sold_price, sold_at) เพื่อให้สินค้ากลับมาอยู่ในสต็อกอีกครั้ง
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-outline" onclick="closeModal('modal-return-customer')">ยกเลิก</button>
+      <button class="btn-warning" onclick="saveReturnToCustomer()">บันทึกการคืนสินค้า</button>
+    </div>
+  </div>
+</div>
+
+<!-- Return to Seller Modal -->
+<div id="modal-return-seller" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>↩️ คืนสินค้าให้ผู้ขาย (เราคืนเพราะมีปัญหา)</h3>
+      <button class="close-modal" onclick="closeModal('modal-return-seller')">&times;</button>
+    </div>
+    <div>
+      <p style="font-size:13px;color:#6b7280;">สินค้า: <strong id="return-seller-item-name"></strong></p>
+      <p style="font-size:13px;color:#6b7280;">ต้นทุนเดิม: <strong id="return-seller-item-cost"></strong> บาท</p>
+      
+      <label>เหตุผลที่คืน
+        <textarea id="return-seller-reason" placeholder="เช่น: ซื้อมาแล้วพบว่า Sensor เสีย, ไม่ตรงสเปค, ฯลฯ"></textarea>
+      </label>
+      <label>วันที่คืน
+        <input id="return-seller-date" type="text">
+      </label>
+      <label>ได้เงินคืนจากผู้ขาย (บาท)
+        <input id="return-seller-refund" type="number" step="0.01" placeholder="จำนวนเงินที่ได้คืนจากผู้ขาย (เต็มจำนวนหรือบางส่วน)">
+      </label>
+      <label>การจัดการสินค้า
+        <select id="return-seller-action">
+          <option value="remove">ลบออกจากสต็อก (คืนผู้ขายแล้ว)</option>
+          <option value="keep">เก็บไว้ในสต็อก (status: คืนผู้ขาย)</option>
+        </select>
+      </label>
+      <div style="margin-top:12px;padding:8px;background:#dbeafe;border-radius:6px;font-size:13px;">
+        💡 <strong>คำอธิบาย:</strong><br>
+        • <strong>ลบออก</strong>: ใช้เมื่อคืนสินค้าและได้เงินคืนเต็มจำนวน ไม่มีสินค้าอยู่แล้ว<br>
+        • <strong>เก็บไว้</strong>: ใช้เมื่อคืนได้บางส่วน หรือต้องการเก็บประวัติไว้ดู
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-outline" onclick="closeModal('modal-return-seller')">ยกเลิก</button>
+      <button class="btn-info" onclick="saveReturnToSeller()">บันทึกการคืนให้ผู้ขาย</button>
+    </div>
+  </div>
+</div>
+
+<!-- Adjust Cost Modal -->
+<div id="modal-adjust-cost" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>💰 แก้ไขต้นทุน</h3>
+      <button class="close-modal" onclick="closeModal('modal-adjust-cost')">&times;</button>
+    </div>
+    <div>
+      <p style="font-size:13px;color:#6b7280;">สินค้า: <strong id="adjust-item-name"></strong></p>
+      <p style="font-size:13px;color:#6b7280;">ต้นทุนปัจจุบัน: <strong id="adjust-item-cost"></strong> บาท</p>
+      
+      <label>ต้นทุนซื้อ (base_cost)
+        <input id="adjust-base-cost" type="number" step="0.01">
+      </label>
+      <label>ค่าซ่อม (repair_cost)
+        <input id="adjust-repair-cost" type="number" step="0.01">
+      </label>
+      <label>ค่าใช้จ่ายอื่นๆ (other_cost)
+        <input id="adjust-other-cost" type="number" step="0.01">
+      </label>
+      <label>เหตุผลในการแก้ไข
+        <textarea id="adjust-reason" placeholder="เช่น: ได้คืนเงินจากผู้ขาย 500 บาท, ค่าซ่อมเพิ่มเติม, ฯลฯ"></textarea>
+      </label>
+      <div id="adjust-cost-preview" style="margin-top:12px;padding:8px;background:#e0f2fe;border-radius:6px;font-size:13px;">
+        <strong>ต้นทุนรวมใหม่:</strong> <span id="new-total-cost">-</span> บาท
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-outline" onclick="closeModal('modal-adjust-cost')">ยกเลิก</button>
+      <button class="btn-primary" onclick="saveAdjustCost()">บันทึกการแก้ไข</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Item Modal -->
+<div id="modal-delete-item" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>🗑️ ลบสต็อก</h3>
+      <button class="close-modal" onclick="closeModal('modal-delete-item')">&times;</button>
+    </div>
+    <div>
+      <p style="font-size:13px;color:#6b7280;">สินค้า: <strong id="delete-item-name"></strong></p>
+      <p style="font-size:13px;color:#6b7280;">ID: <strong id="delete-item-id"></strong></p>
+      
+      <div style="margin-top:12px;padding:12px;background:#fecaca;border-radius:6px;font-size:13px;">
+        ⚠️ <strong>คำเตือน:</strong> การลบข้อมูลไม่สามารถกู้คืนได้! คุณแน่ใจหรือไม่?
+      </div>
+      
+      <label style="margin-top:12px;">เหตุผลในการลบ (ไม่บังคับ)
+        <textarea id="delete-reason" placeholder="เช่น: ข้อมูลซ้ำ, ป้อนข้อมูลผิด, ฯลฯ"></textarea>
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-outline" onclick="closeModal('modal-delete-item')">ยกเลิก</button>
+      <button class="btn-danger" onclick="confirmDeleteItem()">ยืนยันการลบ</button>
+    </div>
+  </div>
+</div>
 
 <div id="page-dashboard" class="page">
   <div class="card" style="background:transparent; box-shadow:none; padding:0;">
@@ -397,6 +649,8 @@
       <button class="active" data-filter="available">พร้อมขาย</button>
       <button data-filter="sold">ขายแล้ว</button>
       <button data-filter="repair">รอซ่อม</button>
+      <button data-filter="returned-customer">คืนลูกค้า</button>
+      <button data-filter="returned-seller">คืนผู้ขาย</button>
       <button data-filter="all">ทั้งหมด</button>
     </div>
 
@@ -416,7 +670,7 @@
             <th>รับของ</th>
             <th>ขาย</th>
             <th>กำไร</th>
-            <th>แก้ไข</th>
+            <th>จัดการ</th>
           </tr>
         </thead>
         <tbody id="inv-tbody"></tbody>
@@ -774,18 +1028,25 @@
 </div>
 
 <script>
-  // *** เปลี่ยนเป็น URL ของเว็บแอป Apps Script คุณเอง ***
   const API_BASE_URL = 'https://script.google.com/macros/s/AKfycbwqsk-kJBiV85mh1Y7gnQ2npnJvvMuwWMWt83JZ2k73JS2IivSPP9e6oTaVz-cyeyMqcQ/exec';
   
-  let allItems = []; // เก็บข้อมูลสินค้าทั้งหมดสำหรับ autocomplete
-  let currentFilter = 'available'; // Filter เริ่มต้น
+  let allItems = [];
+  let currentFilter = 'available';
+  let currentEditItem = null;
 
-  // Toast Notification
   function showToast(message, isError = false) {
     const toast = document.getElementById('toast');
     toast.textContent = message;
     toast.className = 'toast show' + (isError ? ' error' : '');
     setTimeout(() => toast.className = 'toast', 3000);
+  }
+
+  function openModal(modalId) {
+    document.getElementById(modalId).classList.add('show');
+  }
+
+  function closeModal(modalId) {
+    document.getElementById(modalId).classList.remove('show');
   }
 
   async function apiGet(params) {
@@ -817,13 +1078,14 @@
   
   function tagClass(status) {
     if (!status) return 'tag';
+    if (status.includes('คืนผู้ขาย')) return 'tag returned-seller';
+    if (status.includes('คืน')) return 'tag returned';
     if (status.includes('ขาย')) return 'tag sold';
     if (status.includes('ซ่อม')) return 'tag repair';
     if (status.includes('พร้อม')) return 'tag ready';
     return 'tag';
   }
 
-  // Set button loading state
   function setButtonLoading(buttonId, isLoading, originalText = 'บันทึก') {
     const btn = document.getElementById(buttonId);
     const textSpan = document.getElementById(buttonId + '-text');
@@ -836,7 +1098,6 @@
     }
   }
 
-  // NAV
   document.querySelectorAll('.nav button').forEach(btn => {
     btn.addEventListener('click', () => {
       const page = btn.dataset.page;
@@ -906,17 +1167,19 @@
   function renderInventory() {
     const tbody = document.getElementById('inv-tbody');
     
-    // Filter items based on current filter
     let filteredItems = allItems;
     if (currentFilter === 'available') {
       filteredItems = allItems.filter(it => !it.sold_price && it.status === 'พร้อมขาย');
     } else if (currentFilter === 'sold') {
-      filteredItems = allItems.filter(it => it.sold_price);
+      filteredItems = allItems.filter(it => it.sold_price && !it.status?.includes('คืน'));
     } else if (currentFilter === 'repair') {
       filteredItems = allItems.filter(it => it.status && it.status.includes('ซ่อม'));
+    } else if (currentFilter === 'returned-customer') {
+      filteredItems = allItems.filter(it => it.status && it.status.includes('คืนลูกค้า'));
+    } else if (currentFilter === 'returned-seller') {
+      filteredItems = allItems.filter(it => it.status && it.status.includes('คืนผู้ขาย'));
     }
 
-    // Sort by received_at (newest first)
     filteredItems.sort((a, b) => {
       const dateA = a.received_at || '';
       const dateB = b.received_at || '';
@@ -937,6 +1200,9 @@
         pf = sold - cost;
         profitTotal += pf;
       }
+      
+      const isReturned = it.status && it.status.includes('คืน');
+      
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${it.id}</td>
@@ -950,7 +1216,15 @@
         <td>${it.received_at || ''}</td>
         <td>${it.sold_at || ''}</td>
         <td style="color:${pf>0?'green':(pf<0?'red':'#555')}">${sold?money(pf):'-'}</td>
-        <td><button class="btn-outline" style="font-size:11px;" onclick="editItemPrompt('${it.id}')">แก้ไข</button></td>
+        <td>
+          <div class="action-btns">
+            <button class="btn-outline btn-sm" onclick="openEditItemModal('${it.id}')">แก้ไข</button>
+            ${sold && !isReturned ? `<button class="btn-warning btn-sm" onclick="openReturnToCustomerModal('${it.id}')">คืนลูกค้า</button>` : ''}
+            ${!sold && !isReturned ? `<button class="btn-info btn-sm" onclick="openReturnToSellerModal('${it.id}')">คืนผู้ขาย</button>` : ''}
+            <button class="btn-outline btn-sm" onclick="openAdjustCostModal('${it.id}')">แก้ไขต้นทุน</button>
+            <button class="btn-danger btn-sm" onclick="openDeleteItemModal('${it.id}')">ลบ</button>
+          </div>
+        </td>
       `;
       tbody.appendChild(tr);
     });
@@ -959,7 +1233,6 @@
       `แสดง <strong>${filteredItems.length}</strong> รายการ | ของค้างสต็อก <strong>${stockCount}</strong> ชิ้น | มูลค่าต้นทุน <strong>${money(stockValue)}</strong> บาท | กำไรจากของที่ขายแล้ว <strong>${money(profitTotal)}</strong> บาท`;
   }
 
-  // Filter tabs
   document.querySelectorAll('.filter-tabs button').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.filter-tabs button').forEach(b => b.classList.remove('active'));
@@ -992,7 +1265,6 @@
       await loadInventory();
       await loadDashboard();
       
-      // Clear form
       document.getElementById('inv-brand').value = '';
       document.getElementById('inv-model').value = '';
       document.getElementById('inv-sn').value = '';
@@ -1009,27 +1281,254 @@
     }
   }
 
-  async function editItemPrompt(id) {
+  /******** EDIT ITEM MODAL ********/
+  async function openEditItemModal(id) {
     try {
       const res = await apiGet({action:'getItem', id});
       if (!res.ok || !res.data) { 
         showToast('โหลดข้อมูลไม่สำเร็จ', true); 
         return; 
       }
-      const it = res.data;
-      const newStatus = prompt('Status ใหม่ (Cancel = ไม่เปลี่ยน)', it.status || '');
-      const soldPrice = prompt('ราคาขายจริง (ว่าง = ยังไม่ขาย)', it.sold_price || '');
-      let soldAt = it.sold_at || '';
-      if (soldPrice && soldPrice !== '0') {
-        soldAt = prompt('วันที่ขาย (YYYY-MM-DD)', soldAt || '');
-      }
-      const payload = { id: it.id };
-      if (newStatus !== null) payload.status = newStatus;
-      if (soldPrice !== null) payload.sold_price = soldPrice;
-      if (soldAt !== null) payload.sold_at = soldAt;
-      const res2 = await apiPost('updateItem', payload);
-      if (!res2.ok) throw new Error(res2.error || 'error');
+      currentEditItem = res.data;
+      document.getElementById('edit-item-id').value = currentEditItem.id;
+      document.getElementById('edit-status').value = currentEditItem.status || '';
+      document.getElementById('edit-sold-price').value = currentEditItem.sold_price || '';
+      document.getElementById('edit-sold-at').value = currentEditItem.sold_at || '';
+      openModal('modal-edit-item');
+    } catch (err) {
+      showToast('❌ ' + err.message, true);
+    }
+  }
+
+  async function saveItemEdit() {
+    const payload = {
+      id: document.getElementById('edit-item-id').value,
+      status: document.getElementById('edit-status').value,
+      sold_price: document.getElementById('edit-sold-price').value,
+      sold_at: document.getElementById('edit-sold-at').value
+    };
+    
+    try {
+      const res = await apiPost('updateItem', payload);
+      if (!res.ok) throw new Error(res.error || 'error');
       showToast('✅ อัพเดทสำเร็จ');
+      closeModal('modal-edit-item');
+      await loadInventory();
+      await loadDashboard();
+    } catch (err) {
+      showToast('❌ ' + err.message, true);
+    }
+  }
+
+  /******** RETURN TO CUSTOMER MODAL ********/
+  async function openReturnToCustomerModal(id) {
+    try {
+      const res = await apiGet({action:'getItem', id});
+      if (!res.ok || !res.data) { 
+        showToast('โหลดข้อมูลไม่สำเร็จ', true); 
+        return; 
+      }
+      currentEditItem = res.data;
+      document.getElementById('return-cust-item-name').textContent = `${currentEditItem.brand} ${currentEditItem.model} (${currentEditItem.id})`;
+      document.getElementById('return-cust-item-cost').textContent = money(currentEditItem.total_cost);
+      document.getElementById('return-cust-sold-price').textContent = money(currentEditItem.sold_price);
+      document.getElementById('return-cust-date').value = new Date().toISOString().split('T')[0];
+      document.getElementById('return-cust-new-status').value = 'รอเช็ค';
+      document.getElementById('return-cust-reason').value = '';
+      document.getElementById('return-cust-refund-amount').value = currentEditItem.sold_price || '';
+      openModal('modal-return-customer');
+    } catch (err) {
+      showToast('❌ ' + err.message, true);
+    }
+  }
+
+  async function saveReturnToCustomer() {
+    const reason = document.getElementById('return-cust-reason').value;
+    const newStatus = document.getElementById('return-cust-new-status').value;
+    const refundAmount = document.getElementById('return-cust-refund-amount').value;
+    
+    if (!reason) {
+      showToast('❌ กรุณาระบุเหตุผลที่คืนสินค้า', true);
+      return;
+    }
+
+    const payload = {
+      id: currentEditItem.id,
+      status: newStatus,
+      sold_price: '',
+      sold_at: '',
+      note: `คืนจากลูกค้า: ${reason} (วันที่: ${document.getElementById('return-cust-date').value}, คืนเงิน: ${money(refundAmount)} บาท)`
+    };
+    
+    try {
+      const res = await apiPost('updateItem', payload);
+      if (!res.ok) throw new Error(res.error || 'error');
+      showToast('✅ บันทึกการคืนสินค้าสำเร็จ');
+      closeModal('modal-return-customer');
+      await loadInventory();
+      await loadDashboard();
+    } catch (err) {
+      showToast('❌ ' + err.message, true);
+    }
+  }
+
+  /******** RETURN TO SELLER MODAL ********/
+  async function openReturnToSellerModal(id) {
+    try {
+      const res = await apiGet({action:'getItem', id});
+      if (!res.ok || !res.data) { 
+        showToast('โหลดข้อมูลไม่สำเร็จ', true); 
+        return; 
+      }
+      currentEditItem = res.data;
+      document.getElementById('return-seller-item-name').textContent = `${currentEditItem.brand} ${currentEditItem.model} (${currentEditItem.id})`;
+      document.getElementById('return-seller-item-cost').textContent = money(currentEditItem.total_cost);
+      document.getElementById('return-seller-date').value = new Date().toISOString().split('T')[0];
+      document.getElementById('return-seller-reason').value = '';
+      document.getElementById('return-seller-refund').value = currentEditItem.total_cost || '';
+      document.getElementById('return-seller-action').value = 'remove';
+      openModal('modal-return-seller');
+    } catch (err) {
+      showToast('❌ ' + err.message, true);
+    }
+  }
+
+  async function saveReturnToSeller() {
+    const reason = document.getElementById('return-seller-reason').value;
+    const refundAmount = document.getElementById('return-seller-refund').value;
+    const action = document.getElementById('return-seller-action').value;
+    
+    if (!reason) {
+      showToast('❌ กรุณาระบุเหตุผลที่คืนสินค้า', true);
+      return;
+    }
+
+    const note = `คืนให้ผู้ขาย: ${reason} (วันที่: ${document.getElementById('return-seller-date').value}, ได้เงินคืน: ${money(refundAmount)} บาท)`;
+
+    try {
+      if (action === 'remove') {
+        // ลบสินค้าออกจากสต็อก
+        const res = await apiPost('deleteItem', {
+          id: currentEditItem.id,
+          reason: note
+        });
+        if (!res.ok) throw new Error(res.error || 'error');
+        showToast('✅ คืนสินค้าให้ผู้ขายและลบออกจากสต็อกแล้ว');
+      } else {
+        // เก็บไว้ในสต็อก แต่เปลี่ยน status
+        const payload = {
+          id: currentEditItem.id,
+          status: 'คืนผู้ขาย',
+          note: note
+        };
+        const res = await apiPost('updateItem', payload);
+        if (!res.ok) throw new Error(res.error || 'error');
+        showToast('✅ บันทึกการคืนให้ผู้ขายสำเร็จ');
+      }
+      
+      closeModal('modal-return-seller');
+      await loadInventory();
+      await loadDashboard();
+    } catch (err) {
+      showToast('❌ ' + err.message, true);
+    }
+  }
+
+  /******** ADJUST COST MODAL ********/
+  async function openAdjustCostModal(id) {
+    try {
+      const res = await apiGet({action:'getItem', id});
+      if (!res.ok || !res.data) { 
+        showToast('โหลดข้อมูลไม่สำเร็จ', true); 
+        return; 
+      }
+      currentEditItem = res.data;
+      document.getElementById('adjust-item-name').textContent = `${currentEditItem.brand} ${currentEditItem.model} (${currentEditItem.id})`;
+      document.getElementById('adjust-item-cost').textContent = money(currentEditItem.total_cost);
+      document.getElementById('adjust-base-cost').value = currentEditItem.base_cost || 0;
+      document.getElementById('adjust-repair-cost').value = currentEditItem.repair_cost || 0;
+      document.getElementById('adjust-other-cost').value = currentEditItem.other_cost || 0;
+      document.getElementById('adjust-reason').value = '';
+      updateCostPreview();
+      openModal('modal-adjust-cost');
+    } catch (err) {
+      showToast('❌ ' + err.message, true);
+    }
+  }
+
+  function updateCostPreview() {
+    const base = Number(document.getElementById('adjust-base-cost').value || 0);
+    const repair = Number(document.getElementById('adjust-repair-cost').value || 0);
+    const other = Number(document.getElementById('adjust-other-cost').value || 0);
+    const total = base + repair + other;
+    document.getElementById('new-total-cost').textContent = money(total);
+  }
+
+  document.getElementById('adjust-base-cost').addEventListener('input', updateCostPreview);
+  document.getElementById('adjust-repair-cost').addEventListener('input', updateCostPreview);
+  document.getElementById('adjust-other-cost').addEventListener('input', updateCostPreview);
+
+  async function saveAdjustCost() {
+    const reason = document.getElementById('adjust-reason').value;
+    
+    if (!reason) {
+      showToast('❌ กรุณาระบุเหตุผลในการแก้ไขต้นทุน', true);
+      return;
+    }
+
+    const payload = {
+      id: currentEditItem.id,
+      base_cost: document.getElementById('adjust-base-cost').value,
+      repair_cost: document.getElementById('adjust-repair-cost').value,
+      other_cost: document.getElementById('adjust-other-cost').value,
+      note: `แก้ไขต้นทุน: ${reason}`
+    };
+    
+    try {
+      const res = await apiPost('updateItem', payload);
+      if (!res.ok) throw new Error(res.error || 'error');
+      showToast('✅ แก้ไขต้นทุนสำเร็จ');
+      closeModal('modal-adjust-cost');
+      await loadInventory();
+      await loadDashboard();
+    } catch (err) {
+      showToast('❌ ' + err.message, true);
+    }
+  }
+
+  /******** DELETE ITEM MODAL ********/
+  async function openDeleteItemModal(id) {
+    try {
+      const res = await apiGet({action:'getItem', id});
+      if (!res.ok || !res.data) { 
+        showToast('โหลดข้อมูลไม่สำเร็จ', true); 
+        return; 
+      }
+      currentEditItem = res.data;
+      document.getElementById('delete-item-name').textContent = `${currentEditItem.brand} ${currentEditItem.model}`;
+      document.getElementById('delete-item-id').textContent = currentEditItem.id;
+      document.getElementById('delete-reason').value = '';
+      openModal('modal-delete-item');
+    } catch (err) {
+      showToast('❌ ' + err.message, true);
+    }
+  }
+
+  async function confirmDeleteItem() {
+    const reason = document.getElementById('delete-reason').value;
+    
+    if (!confirm('คุณแน่ใจหรือไม่ที่จะลบสินค้านี้? การกระทำนี้ไม่สามารถยกเลิกได้!')) {
+      return;
+    }
+
+    try {
+      const res = await apiPost('deleteItem', {
+        id: currentEditItem.id,
+        reason: reason
+      });
+      if (!res.ok) throw new Error(res.error || 'error');
+      showToast('✅ ลบสินค้าสำเร็จ');
+      closeModal('modal-delete-item');
       await loadInventory();
       await loadDashboard();
     } catch (err) {
@@ -1053,10 +1552,10 @@
     }
 
     const matches = allItems.filter(it => {
-      if (it.sold_price) return false; // ไม่แสดงของที่ขายแล้ว
+      if (it.sold_price) return false;
       const searchStr = `${it.id} ${it.brand} ${it.model} ${it.category}`.toLowerCase();
       return searchStr.includes(val);
-    }).slice(0, 10); // แสดงแค่ 10 รายการแรก
+    }).slice(0, 10);
 
     matches.forEach(it => {
       const div = document.createElement('div');
@@ -1083,7 +1582,6 @@
     document.getElementById('selected-item-preview').style.display = 'none';
   }
 
-  // Close autocomplete when clicking outside
   document.addEventListener('click', function(e) {
     if (e.target !== searchInput) {
       autocompleteList.innerHTML = '';
@@ -1157,7 +1655,6 @@
       await loadInventory();
       await loadDashboard();
       
-      // Clear form
       searchInput.value = '';
       selectedItemId = null;
       hideItemPreview();
@@ -1220,7 +1717,6 @@
       await loadPurchases();
       await loadDashboard();
       
-      // Clear form
       document.getElementById('pur-seller').value = '';
       document.getElementById('pur-amount').value = '';
       document.getElementById('pur-track').value = '';
@@ -1273,7 +1769,6 @@
       showToast('✅ เพิ่มอะไหล่สำเร็จ');
       await loadParts();
       
-      // Clear form
       document.getElementById('part-name').value = '';
       document.getElementById('part-models').value = '';
       document.getElementById('part-qty').value = '';
@@ -1311,7 +1806,6 @@
       await loadParts();
       await loadDashboard();
       
-      // Clear form
       document.getElementById('rep-item-id').value = '';
       document.getElementById('rep-problem').value = '';
       document.getElementById('rep-actions').value = '';
@@ -1370,7 +1864,6 @@
       await loadLoans();
       await loadDashboard();
       
-      // Clear form
       document.getElementById('loan-lender').value = '';
       document.getElementById('loan-amount').value = '';
       document.getElementById('loan-rate').value = '';
@@ -1397,6 +1890,7 @@
   document.getElementById('sale-date').value = today;
   document.getElementById('pur-date').value = today;
   document.getElementById('inv-received-at').value = today;
+  document.getElementById('loan-date').value = today;
 
   // INITIAL LOAD
   (async function init() {
