@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8" />
-  <title>Camera Flip Backend</title>
+  <title>Camera Flip Backend - ปรับปรุง</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
@@ -101,6 +101,10 @@
       align-items: center;
       gap: 4px;
     }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
     .btn-primary {
       background: #22c55e;
       color: #022c22;
@@ -156,15 +160,104 @@
     .stat-value { font-size:22px; margin-top:4px; }
     .stat-sub { font-size:11px; color:#9ca3af; margin-top:2px; }
 
+    /* Toast Notification */
+    .toast {
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      background: white;
+      padding: 12px 16px;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      display: none;
+      z-index: 1000;
+      max-width: 300px;
+      border-left: 4px solid #22c55e;
+    }
+    .toast.show { display: block; animation: slideIn 0.3s ease; }
+    .toast.error { border-left-color: #ef4444; }
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    /* Filter Tabs */
+    .filter-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .filter-tabs button {
+      padding: 6px 12px;
+      background: #f3f4f6;
+      color: #374151;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .filter-tabs button.active {
+      background: #3b82f6;
+      color: white;
+    }
+
+    /* Autocomplete */
+    .autocomplete {
+      position: relative;
+    }
+    .autocomplete-items {
+      position: absolute;
+      border: 1px solid #d4d4d4;
+      background: white;
+      z-index: 99;
+      top: 100%;
+      left: 0;
+      right: 0;
+      max-height: 200px;
+      overflow-y: auto;
+      border-radius: 6px;
+      margin-top: 2px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .autocomplete-items div {
+      padding: 8px;
+      cursor: pointer;
+      border-bottom: 1px solid #f3f4f6;
+      font-size: 13px;
+    }
+    .autocomplete-items div:hover {
+      background-color: #f3f4f6;
+    }
+    .autocomplete-active {
+      background-color: #3b82f6 !important;
+      color: white;
+    }
+
+    /* Loading Spinner */
+    .spinner {
+      border: 2px solid #f3f3f3;
+      border-top: 2px solid #22c55e;
+      border-radius: 50%;
+      width: 14px;
+      height: 14px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
     @media (max-width: 768px) {
       .col-3, .col-4, .col-6 { flex: 0 0 100%; }
       header h1 { font-size: 16px; }
+      .toast { right: 10px; left: 10px; max-width: none; }
     }
   </style>
 </head>
 <body>
 <header>
-  <h1>Camera Flip Backend</h1>
+  <h1>📷 Camera Flip Backend</h1>
   <div class="nav">
     <button data-page="dashboard" class="active">Dashboard</button>
     <button data-page="inventory">สต็อก</button>
@@ -174,6 +267,9 @@
     <button data-page="cash">เงินสด & หนี้</button>
   </div>
 </header>
+
+<!-- Toast Notification -->
+<div id="toast" class="toast"></div>
 
 <div id="page-dashboard" class="page">
   <div class="card" style="background:transparent; box-shadow:none; padding:0;">
@@ -285,8 +381,9 @@
       </div>
     </div>
     <br>
-    <button class="btn-primary" id="btn-inv-add">บันทึกสินค้า</button>
-    <span id="msg-inv" style="font-size:13px;margin-left:8px;"></span>
+    <button class="btn-primary" id="btn-inv-add">
+      <span id="btn-inv-add-text">บันทึกสินค้า</span>
+    </button>
   </div>
 
   <div class="card">
@@ -294,6 +391,15 @@
       <h2>รายการสต็อก</h2>
       <button class="btn-outline" id="btn-inv-reload">รีเฟรช</button>
     </div>
+    
+    <!-- Filter Tabs -->
+    <div class="filter-tabs">
+      <button class="active" data-filter="available">พร้อมขาย</button>
+      <button data-filter="sold">ขายแล้ว</button>
+      <button data-filter="repair">รอซ่อม</button>
+      <button data-filter="all">ทั้งหมด</button>
+    </div>
+
     <div id="inv-summary" style="font-size:13px;margin-bottom:8px;"></div>
     <div style="max-height:420px;overflow:auto;">
       <table>
@@ -323,11 +429,11 @@
 <div id="page-sales" class="page" style="display:none;">
   <div class="card">
     <h2>ออกบิลขายแบบเร็ว</h2>
-    <p style="font-size:13px;">(เลือก item_id จากสต็อก → กรอกราคาขาย → กดบันทึก)</p>
+    <p style="font-size:13px;color:#6b7280;">💡 พิมพ์ ID, ยี่ห้อ หรือรุ่นเพื่อค้นหาสินค้า</p>
     <div class="row">
       <div class="col-3">
         <label>วันที่ขาย
-          <input id="sale-date" placeholder="2025-11-20" />
+          <input id="sale-date" placeholder="2025-12-29" />
         </label>
       </div>
       <div class="col-3">
@@ -368,8 +474,11 @@
 
     <div class="row">
       <div class="col-4">
-        <label>Item ID
-          <input id="sale-item-id" placeholder="เช่น ITM-.... (ดูจากตารางสต็อก)" />
+        <label>ค้นหาสินค้า (พิมพ์เพื่อค้นหา)
+          <div class="autocomplete">
+            <input id="sale-item-search" placeholder="พิมพ์ ID / ยี่ห้อ / รุ่น..." autocomplete="off" />
+            <div id="autocomplete-list" class="autocomplete-items"></div>
+          </div>
         </label>
       </div>
       <div class="col-4">
@@ -383,13 +492,19 @@
         </label>
       </div>
     </div>
+
+    <div id="selected-item-preview" style="margin-top:8px;padding:8px;background:#f3f4f6;border-radius:6px;font-size:13px;display:none;">
+      <strong>สินค้าที่เลือก:</strong> <span id="preview-text"></span>
+    </div>
+
     <br>
-    <button class="btn-primary" id="btn-sale-submit">บันทึกการขาย</button>
-    <span id="msg-sale" style="font-size:13px;margin-left:8px;"></span>
+    <button class="btn-primary" id="btn-sale-submit">
+      <span id="btn-sale-submit-text">บันทึกการขาย</span>
+    </button>
   </div>
 
   <div class="card">
-    <h2>ประวัติการขาย (ล่าสุด)</h2>
+    <h2>ประวัติการขาย (ล่าสุด 50 รายการ)</h2>
     <div style="max-height:420px;overflow:auto;">
       <table>
         <thead>
@@ -456,12 +571,13 @@
       </div>
     </div>
     <br>
-    <button class="btn-primary" id="btn-pur-submit">บันทึกการซื้อ</button>
-    <span id="msg-pur" style="font-size:13px;margin-left:8px;"></span>
+    <button class="btn-primary" id="btn-pur-submit">
+      <span id="btn-pur-submit-text">บันทึกการซื้อ</span>
+    </button>
   </div>
 
   <div class="card">
-    <h2>ประวัติการซื้อ</h2>
+    <h2>ประวัติการซื้อ (ล่าสุด 50 รายการ)</h2>
     <div style="max-height:420px;overflow:auto;">
       <table>
         <thead>
@@ -534,8 +650,9 @@
       </div>
     </div>
     <br>
-    <button class="btn-primary" id="btn-rep-submit">บันทึกการซ่อม</button>
-    <span id="msg-rep" style="font-size:13px;margin-left:8px;"></span>
+    <button class="btn-primary" id="btn-rep-submit">
+      <span id="btn-rep-submit-text">บันทึกการซ่อม</span>
+    </button>
   </div>
 
   <div class="card">
@@ -563,8 +680,9 @@
       </div>
     </div>
     <br>
-    <button class="btn-primary" id="btn-part-submit">เพิ่มอะไหล่ใหม่</button>
-    <span id="msg-part" style="font-size:13px;margin-left:8px;"></span>
+    <button class="btn-primary" id="btn-part-submit">
+      <span id="btn-part-submit-text">เพิ่มอะไหล่ใหม่</span>
+    </button>
 
     <hr style="margin:12px 0;">
 
@@ -630,8 +748,9 @@
       </div>
     </div>
     <br>
-    <button class="btn-primary" id="btn-loan-submit">บันทึกเงินกู้</button>
-    <span id="msg-loan" style="font-size:13px;margin-left:8px;"></span>
+    <button class="btn-primary" id="btn-loan-submit">
+      <span id="btn-loan-submit-text">บันทึกเงินกู้</span>
+    </button>
   </div>
 
   <div class="card">
@@ -657,7 +776,17 @@
 <script>
   // *** เปลี่ยนเป็น URL ของเว็บแอป Apps Script คุณเอง ***
   const API_BASE_URL = 'https://script.google.com/macros/s/AKfycbwqsk-kJBiV85mh1Y7gnQ2npnJvvMuwWMWt83JZ2k73JS2IivSPP9e6oTaVz-cyeyMqcQ/exec';
+  
+  let allItems = []; // เก็บข้อมูลสินค้าทั้งหมดสำหรับ autocomplete
+  let currentFilter = 'available'; // Filter เริ่มต้น
 
+  // Toast Notification
+  function showToast(message, isError = false) {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.className = 'toast show' + (isError ? ' error' : '');
+    setTimeout(() => toast.className = 'toast', 3000);
+  }
 
   async function apiGet(params) {
     const url = new URL(API_BASE_URL);
@@ -665,27 +794,46 @@
     const res = await fetch(url.toString());
     return res.json();
   }
+  
   async function apiPost(action, data) {
     const url = new URL(API_BASE_URL);
     url.searchParams.set('action', action);
+    
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify(data));
+    
     const res = await fetch(url.toString(), {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(data)
+      method: 'POST',
+      body: formData
     });
     return res.json();
   }
+  
   function money(n) {
     const num = Number(n || 0);
     if (isNaN(num)) return '-';
     return num.toLocaleString('th-TH', {maximumFractionDigits:0});
   }
+  
   function tagClass(status) {
     if (!status) return 'tag';
     if (status.includes('ขาย')) return 'tag sold';
     if (status.includes('ซ่อม')) return 'tag repair';
     if (status.includes('พร้อม')) return 'tag ready';
     return 'tag';
+  }
+
+  // Set button loading state
+  function setButtonLoading(buttonId, isLoading, originalText = 'บันทึก') {
+    const btn = document.getElementById(buttonId);
+    const textSpan = document.getElementById(buttonId + '-text');
+    if (isLoading) {
+      btn.disabled = true;
+      textSpan.innerHTML = '<span class="spinner"></span> กำลังบันทึก...';
+    } else {
+      btn.disabled = false;
+      textSpan.textContent = originalText;
+    }
   }
 
   // NAV
@@ -723,7 +871,10 @@
           labels,
           datasets: [{
             label: 'กำไรต่อเดือน (บาท)',
-            data: values
+            data: values,
+            borderColor: '#22c55e',
+            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+            tension: 0.3
           }]
         },
         options: {
@@ -733,6 +884,7 @@
       });
     } catch (err) {
       console.error(err);
+      showToast('โหลด Dashboard ไม่สำเร็จ', true);
     }
   }
 
@@ -743,46 +895,79 @@
     try {
       const res = await apiGet({action:'listItems'});
       if (!res.ok) throw new Error(res.error || 'error');
-      const items = res.data || [];
-
-      let stockCount = 0, stockValue = 0, profitTotal = 0;
-      tbody.innerHTML = '';
-
-      items.forEach(it => {
-        const cost = Number(it.total_cost || 0);
-        const sold = Number(it.sold_price || 0);
-        let pf = 0;
-        if (!sold) {
-          stockCount++;
-          stockValue += cost;
-        } else {
-          pf = sold - cost;
-          profitTotal += pf;
-        }
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${it.id}</td>
-          <td><strong>${it.brand || ''} ${it.model || ''}</strong><br><span style="font-size:11px;">${it.category || ''}</span></td>
-          <td>${it.sn || ''}</td>
-          <td>${it.condition || ''}</td>
-          <td><span class="${tagClass(it.status)}">${it.status || ''}</span></td>
-          <td>${money(cost)}</td>
-          <td>${money(it.list_price)}</td>
-          <td>${money(it.sold_price)}</td>
-          <td>${it.received_at || ''}</td>
-          <td>${it.sold_at || ''}</td>
-          <td style="color:${pf>0?'green':(pf<0?'red':'#555')}">${sold?money(pf):'-'}</td>
-          <td><button class="btn-outline" style="font-size:11px;" onclick="editItemPrompt('${it.id}')">แก้ไข</button></td>
-        `;
-        tbody.appendChild(tr);
-      });
-
-      document.getElementById('inv-summary').innerHTML =
-        `ของค้างสต็อก <strong>${stockCount}</strong> ชิ้น | มูลค่าต้นทุน <strong>${money(stockValue)}</strong> บาท | กำไรจากของที่ขายแล้ว <strong>${money(profitTotal)}</strong> บาท`;
+      allItems = res.data || [];
+      renderInventory();
     } catch (err) {
       tbody.innerHTML = '<tr><td colspan="12">Error: '+err.message+'</td></tr>';
+      showToast('โหลดสต็อกไม่สำเร็จ', true);
     }
   }
+
+  function renderInventory() {
+    const tbody = document.getElementById('inv-tbody');
+    
+    // Filter items based on current filter
+    let filteredItems = allItems;
+    if (currentFilter === 'available') {
+      filteredItems = allItems.filter(it => !it.sold_price && it.status === 'พร้อมขาย');
+    } else if (currentFilter === 'sold') {
+      filteredItems = allItems.filter(it => it.sold_price);
+    } else if (currentFilter === 'repair') {
+      filteredItems = allItems.filter(it => it.status && it.status.includes('ซ่อม'));
+    }
+
+    // Sort by received_at (newest first)
+    filteredItems.sort((a, b) => {
+      const dateA = a.received_at || '';
+      const dateB = b.received_at || '';
+      return dateB.localeCompare(dateA);
+    });
+
+    let stockCount = 0, stockValue = 0, profitTotal = 0;
+    tbody.innerHTML = '';
+
+    filteredItems.forEach(it => {
+      const cost = Number(it.total_cost || 0);
+      const sold = Number(it.sold_price || 0);
+      let pf = 0;
+      if (!sold) {
+        stockCount++;
+        stockValue += cost;
+      } else {
+        pf = sold - cost;
+        profitTotal += pf;
+      }
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${it.id}</td>
+        <td><strong>${it.brand || ''} ${it.model || ''}</strong><br><span style="font-size:11px;">${it.category || ''}</span></td>
+        <td>${it.sn || ''}</td>
+        <td>${it.condition || ''}</td>
+        <td><span class="${tagClass(it.status)}">${it.status || ''}</span></td>
+        <td>${money(cost)}</td>
+        <td>${money(it.list_price)}</td>
+        <td>${money(it.sold_price)}</td>
+        <td>${it.received_at || ''}</td>
+        <td>${it.sold_at || ''}</td>
+        <td style="color:${pf>0?'green':(pf<0?'red':'#555')}">${sold?money(pf):'-'}</td>
+        <td><button class="btn-outline" style="font-size:11px;" onclick="editItemPrompt('${it.id}')">แก้ไข</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById('inv-summary').innerHTML =
+      `แสดง <strong>${filteredItems.length}</strong> รายการ | ของค้างสต็อก <strong>${stockCount}</strong> ชิ้น | มูลค่าต้นทุน <strong>${money(stockValue)}</strong> บาท | กำไรจากของที่ขายแล้ว <strong>${money(profitTotal)}</strong> บาท`;
+  }
+
+  // Filter tabs
+  document.querySelectorAll('.filter-tabs button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.filter-tabs button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentFilter = btn.dataset.filter;
+      renderInventory();
+    });
+  });
 
   async function addInventoryItem() {
     const payload = {
@@ -798,24 +983,39 @@
       list_price: document.getElementById('inv-list-price').value,
       received_at: document.getElementById('inv-received-at').value
     };
-    const msg = document.getElementById('msg-inv');
-    msg.textContent = 'กำลังบันทึก...';
+    
+    setButtonLoading('btn-inv-add', true);
     try {
       const res = await apiPost('createItem', payload);
       if (!res.ok) throw new Error(res.error || 'error');
-      msg.textContent = 'บันทึกสำเร็จ';
-      setTimeout(()=>msg.textContent='',2000);
+      showToast('✅ บันทึกสินค้าสำเร็จ');
       await loadInventory();
       await loadDashboard();
+      
+      // Clear form
+      document.getElementById('inv-brand').value = '';
+      document.getElementById('inv-model').value = '';
+      document.getElementById('inv-sn').value = '';
+      document.getElementById('inv-condition').value = '';
+      document.getElementById('inv-base-cost').value = '';
+      document.getElementById('inv-repair-cost').value = '0';
+      document.getElementById('inv-other-cost').value = '0';
+      document.getElementById('inv-list-price').value = '';
+      document.getElementById('inv-received-at').value = '';
     } catch (err) {
-      msg.textContent = 'Error: '+err.message;
+      showToast('❌ ' + err.message, true);
+    } finally {
+      setButtonLoading('btn-inv-add', false, 'บันทึกสินค้า');
     }
   }
 
   async function editItemPrompt(id) {
     try {
       const res = await apiGet({action:'getItem', id});
-      if (!res.ok || !res.data) { alert('โหลดข้อมูลไม่สำเร็จ'); return; }
+      if (!res.ok || !res.data) { 
+        showToast('โหลดข้อมูลไม่สำเร็จ', true); 
+        return; 
+      }
       const it = res.data;
       const newStatus = prompt('Status ใหม่ (Cancel = ไม่เปลี่ยน)', it.status || '');
       const soldPrice = prompt('ราคาขายจริง (ว่าง = ยังไม่ขาย)', it.sold_price || '');
@@ -829,12 +1029,66 @@
       if (soldAt !== null) payload.sold_at = soldAt;
       const res2 = await apiPost('updateItem', payload);
       if (!res2.ok) throw new Error(res2.error || 'error');
+      showToast('✅ อัพเดทสำเร็จ');
       await loadInventory();
       await loadDashboard();
     } catch (err) {
-      alert('Error: '+err.message);
+      showToast('❌ ' + err.message, true);
     }
   }
+
+  /******** AUTOCOMPLETE FOR SALES ********/
+  let selectedItemId = null;
+  const searchInput = document.getElementById('sale-item-search');
+  const autocompleteList = document.getElementById('autocomplete-list');
+
+  searchInput.addEventListener('input', function() {
+    const val = this.value.toLowerCase();
+    autocompleteList.innerHTML = '';
+    
+    if (!val) {
+      selectedItemId = null;
+      hideItemPreview();
+      return;
+    }
+
+    const matches = allItems.filter(it => {
+      if (it.sold_price) return false; // ไม่แสดงของที่ขายแล้ว
+      const searchStr = `${it.id} ${it.brand} ${it.model} ${it.category}`.toLowerCase();
+      return searchStr.includes(val);
+    }).slice(0, 10); // แสดงแค่ 10 รายการแรก
+
+    matches.forEach(it => {
+      const div = document.createElement('div');
+      div.innerHTML = `<strong>${it.id}</strong> - ${it.brand} ${it.model} <span style="color:#6b7280;">(${money(it.list_price)} บาท)</span>`;
+      div.addEventListener('click', function() {
+        selectedItemId = it.id;
+        searchInput.value = `${it.id} - ${it.brand} ${it.model}`;
+        document.getElementById('sale-price').value = it.list_price || '';
+        autocompleteList.innerHTML = '';
+        showItemPreview(it);
+      });
+      autocompleteList.appendChild(div);
+    });
+  });
+
+  function showItemPreview(item) {
+    const preview = document.getElementById('selected-item-preview');
+    const text = document.getElementById('preview-text');
+    text.textContent = `${item.brand} ${item.model} (${item.id}) - ราคาตั้งขาย ${money(item.list_price)} บาท`;
+    preview.style.display = 'block';
+  }
+
+  function hideItemPreview() {
+    document.getElementById('selected-item-preview').style.display = 'none';
+  }
+
+  // Close autocomplete when clicking outside
+  document.addEventListener('click', function(e) {
+    if (e.target !== searchInput) {
+      autocompleteList.innerHTML = '';
+    }
+  });
 
   /******** SALES ********/
   async function loadSales() {
@@ -862,10 +1116,22 @@
       });
     } catch (err) {
       tbody.innerHTML = '<tr><td colspan="6">Error: '+err.message+'</td></tr>';
+      showToast('โหลดประวัติการขายไม่สำเร็จ', true);
     }
   }
 
   async function submitSale() {
+    if (!selectedItemId) {
+      showToast('❌ กรุณาเลือกสินค้าก่อน', true);
+      return;
+    }
+
+    const sellingPrice = document.getElementById('sale-price').value;
+    if (!sellingPrice || Number(sellingPrice) <= 0) {
+      showToast('❌ กรุณากรอกราคาขาย', true);
+      return;
+    }
+
     const payload = {
       sale_date: document.getElementById('sale-date').value,
       customer_name: document.getElementById('sale-customer').value,
@@ -876,23 +1142,33 @@
       shipping_cost: document.getElementById('sale-ship').value,
       platform_fee: document.getElementById('sale-fee').value,
       items: [{
-        item_id: document.getElementById('sale-item-id').value,
-        selling_price: document.getElementById('sale-price').value,
+        item_id: selectedItemId,
+        selling_price: sellingPrice,
         discount: document.getElementById('sale-discount').value
       }]
     };
-    const msg = document.getElementById('msg-sale');
-    msg.textContent = 'กำลังบันทึก...';
+
+    setButtonLoading('btn-sale-submit', true);
     try {
       const res = await apiPost('createSale', payload);
       if (!res.ok) throw new Error(res.error || 'error');
-      msg.textContent = 'บันทึกการขายสำเร็จ';
-      setTimeout(()=>msg.textContent='',2000);
+      showToast('✅ บันทึกการขายสำเร็จ');
       await loadSales();
       await loadInventory();
       await loadDashboard();
+      
+      // Clear form
+      searchInput.value = '';
+      selectedItemId = null;
+      hideItemPreview();
+      document.getElementById('sale-price').value = '';
+      document.getElementById('sale-discount').value = '0';
+      document.getElementById('sale-customer').value = '';
+      document.getElementById('sale-tracking').value = '';
     } catch (err) {
-      msg.textContent = 'Error: '+err.message;
+      showToast('❌ ' + err.message, true);
+    } finally {
+      setButtonLoading('btn-sale-submit', false, 'บันทึกการขาย');
     }
   }
 
@@ -919,6 +1195,7 @@
       });
     } catch (err) {
       tbody.innerHTML = '<tr><td colspan="6">Error: '+err.message+'</td></tr>';
+      showToast('โหลดประวัติการซื้อไม่สำเร็จ', true);
     }
   }
 
@@ -934,17 +1211,24 @@
       tracking_in: document.getElementById('pur-track').value,
       note: document.getElementById('pur-note').value
     };
-    const msg = document.getElementById('msg-pur');
-    msg.textContent = 'กำลังบันทึก...';
+    
+    setButtonLoading('btn-pur-submit', true);
     try {
       const res = await apiPost('createPurchase', payload);
       if (!res.ok) throw new Error(res.error || 'error');
-      msg.textContent = 'บันทึกการซื้อสำเร็จ';
-      setTimeout(()=>msg.textContent='',2000);
+      showToast('✅ บันทึกการซื้อสำเร็จ');
       await loadPurchases();
       await loadDashboard();
+      
+      // Clear form
+      document.getElementById('pur-seller').value = '';
+      document.getElementById('pur-amount').value = '';
+      document.getElementById('pur-track').value = '';
+      document.getElementById('pur-note').value = '';
     } catch (err) {
-      msg.textContent = 'Error: '+err.message;
+      showToast('❌ ' + err.message, true);
+    } finally {
+      setButtonLoading('btn-pur-submit', false, 'บันทึกการซื้อ');
     }
   }
 
@@ -970,6 +1254,7 @@
       });
     } catch (err) {
       tbody.innerHTML = '<tr><td colspan="5">Error: '+err.message+'</td></tr>';
+      showToast('โหลดอะไหล่ไม่สำเร็จ', true);
     }
   }
 
@@ -980,16 +1265,23 @@
       stock_qty: document.getElementById('part-qty').value,
       unit_cost: document.getElementById('part-cost').value
     };
-    const msg = document.getElementById('msg-part');
-    msg.textContent = 'กำลังบันทึก...';
+    
+    setButtonLoading('btn-part-submit', true);
     try {
       const res = await apiPost('createPart', payload);
       if (!res.ok) throw new Error(res.error || 'error');
-      msg.textContent = 'เพิ่มอะไหล่สำเร็จ';
-      setTimeout(()=>msg.textContent='',2000);
+      showToast('✅ เพิ่มอะไหล่สำเร็จ');
       await loadParts();
+      
+      // Clear form
+      document.getElementById('part-name').value = '';
+      document.getElementById('part-models').value = '';
+      document.getElementById('part-qty').value = '';
+      document.getElementById('part-cost').value = '';
     } catch (err) {
-      msg.textContent = 'Error: '+err.message;
+      showToast('❌ ' + err.message, true);
+    } finally {
+      setButtonLoading('btn-part-submit', false, 'เพิ่มอะไหล่ใหม่');
     }
   }
 
@@ -1009,18 +1301,27 @@
     if (partId && qty > 0) {
       payload.parts.push({ part_id: partId, qty });
     }
-    const msg = document.getElementById('msg-rep');
-    msg.textContent = 'กำลังบันทึก...';
+    
+    setButtonLoading('btn-rep-submit', true);
     try {
       const res = await apiPost('createRepair', payload);
       if (!res.ok) throw new Error(res.error || 'error');
-      msg.textContent = 'บันทึกงานซ่อมสำเร็จ';
-      setTimeout(()=>msg.textContent='',2000);
+      showToast('✅ บันทึกงานซ่อมสำเร็จ');
       await loadInventory();
       await loadParts();
       await loadDashboard();
+      
+      // Clear form
+      document.getElementById('rep-item-id').value = '';
+      document.getElementById('rep-problem').value = '';
+      document.getElementById('rep-actions').value = '';
+      document.getElementById('rep-labor').value = '0';
+      document.getElementById('rep-part-id').value = '';
+      document.getElementById('rep-part-qty').value = '0';
     } catch (err) {
-      msg.textContent = 'Error: '+err.message;
+      showToast('❌ ' + err.message, true);
+    } finally {
+      setButtonLoading('btn-rep-submit', false, 'บันทึกการซ่อม');
     }
   }
 
@@ -1047,6 +1348,7 @@
       });
     } catch (err) {
       tbody.innerHTML = '<tr><td colspan="6">Error: '+err.message+'</td></tr>';
+      showToast('โหลดเงินกู้ไม่สำเร็จ', true);
     }
   }
 
@@ -1059,17 +1361,25 @@
       installment_amount: document.getElementById('loan-install').value,
       note: document.getElementById('loan-note').value
     };
-    const msg = document.getElementById('msg-loan');
-    msg.textContent = 'กำลังบันทึก...';
+    
+    setButtonLoading('btn-loan-submit', true);
     try {
       const res = await apiPost('createLoan', payload);
       if (!res.ok) throw new Error(res.error || 'error');
-      msg.textContent = 'บันทึกเงินกู้สำเร็จ';
-      setTimeout(()=>msg.textContent='',2000);
+      showToast('✅ บันทึกเงินกู้สำเร็จ');
       await loadLoans();
       await loadDashboard();
+      
+      // Clear form
+      document.getElementById('loan-lender').value = '';
+      document.getElementById('loan-amount').value = '';
+      document.getElementById('loan-rate').value = '';
+      document.getElementById('loan-install').value = '';
+      document.getElementById('loan-note').value = '';
     } catch (err) {
-      msg.textContent = 'Error: '+err.message;
+      showToast('❌ ' + err.message, true);
+    } finally {
+      setButtonLoading('btn-loan-submit', false, 'บันทึกเงินกู้');
     }
   }
 
@@ -1081,6 +1391,12 @@
   document.getElementById('btn-part-submit').addEventListener('click', submitPart);
   document.getElementById('btn-rep-submit').addEventListener('click', submitRepair);
   document.getElementById('btn-loan-submit').addEventListener('click', submitLoan);
+
+  // Auto-fill today's date
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('sale-date').value = today;
+  document.getElementById('pur-date').value = today;
+  document.getElementById('inv-received-at').value = today;
 
   // INITIAL LOAD
   (async function init() {
