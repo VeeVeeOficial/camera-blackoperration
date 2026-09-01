@@ -346,6 +346,7 @@
     <button data-page="purchases">ซื้อของเข้า</button>
     <button data-page="repairs">ซ่อม & อะไหล่</button>
     <button data-page="cash">เงินสด & หนี้</button>
+    <button data-page="bestsellers">ขายดี</button>
   </div>
 </header>
 
@@ -558,6 +559,19 @@
     <h2>กำไรต่อเดือน</h2>
     <canvas id="chart-profit-month"></canvas>
   </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+      <h2 style="margin:0;">กำไรรายวัน</h2>
+      <input type="date" id="daily-profit-date" style="width:auto;">
+    </div>
+    <p style="font-size:13px;color:#6b7280;margin:8px 0 0;">เลือกวันเพื่อดูว่าขายอะไรไปบ้างและกำไรตัวไหนเท่าไหร่</p>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin:10px 0 6px;">
+      <span style="font-size:13px;color:#6b7280;">กำไรรวม (<span id="daily-profit-count">0</span> ชิ้น)</span>
+      <strong id="daily-profit-total" style="font-size:18px;color:#166534;">฿0</strong>
+    </div>
+    <div id="daily-profit-list"></div>
+  </div>
 </div>
 
 <!-- INVENTORY -->
@@ -645,7 +659,7 @@
     </div>
     
     <!-- Filter Tabs -->
-    <div class="filter-tabs">
+    <div class="filter-tabs" id="inv-filter-tabs">
       <button class="active" data-filter="available">พร้อมขาย</button>
       <button data-filter="sold">ขายแล้ว</button>
       <button data-filter="repair">รอซ่อม</button>
@@ -1027,6 +1041,42 @@
   </div>
 </div>
 
+<!-- BEST SELLERS -->
+<div id="page-bestsellers" class="page" style="display:none;">
+  <div class="card">
+    <h2>สินค้าขายดี & ราคาที่ควรรับซื้อ</h2>
+    <p style="font-size:13px;color:#6b7280;">สรุปจากประวัติการขายจริงทั้งหมด แยกตามยี่ห้อ+รุ่น เพื่อดูว่ารุ่นไหนขายดี และควรรับซื้อเข้ามาที่ราคาเท่าไหร่ถึงจะยังได้กำไรตามเป้า</p>
+    <div class="row">
+      <div class="col-4">
+        <label>เป้ากำไรขั้นต่ำ (% ของราคาขายเฉลี่ย)
+          <input id="bs-margin" type="number" value="20" step="1" min="0" max="90">
+        </label>
+      </div>
+    </div>
+    <div class="filter-tabs" id="bs-sort-tabs" style="margin-top:8px;">
+      <button class="active" data-bs-sort="qty">เรียงตามจำนวนขาย</button>
+      <button data-bs-sort="profit">เรียงตามกำไรรวม</button>
+    </div>
+    <div style="max-height:520px;overflow:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>สินค้า</th>
+            <th>ขายแล้ว</th>
+            <th>ราคาขายเฉลี่ย</th>
+            <th>ต้นทุนซื้อเฉลี่ย</th>
+            <th>ค่าใช้จ่ายอื่นเฉลี่ย</th>
+            <th>กำไรเฉลี่ย/ตัว</th>
+            <th>กำไรรวม</th>
+            <th>ราคาที่ควรรับซื้อไม่เกิน</th>
+          </tr>
+        </thead>
+        <tbody id="bs-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <script>
   const API_BASE_URL = 'https://script.google.com/macros/s/AKfycbyy50AuscxPb2ODSPyf2oMB2-dcdPF5tbasZSg4P9FEFoWUsQUdwcNXjF9nq0aAtE5f3g/exec';
   
@@ -1231,11 +1281,98 @@
 
     document.getElementById('inv-summary').innerHTML =
       `แสดง <strong>${filteredItems.length}</strong> รายการ | ของค้างสต็อก <strong>${stockCount}</strong> ชิ้น | มูลค่าต้นทุน <strong>${money(stockValue)}</strong> บาท | กำไรจากของที่ขายแล้ว <strong>${money(profitTotal)}</strong> บาท`;
+
+    renderDailyProfit();
+    renderBestSellers();
   }
 
-  document.querySelectorAll('.filter-tabs button').forEach(btn => {
+  /******** DAILY PROFIT ********/
+  function renderDailyProfit() {
+    const dateInput = document.getElementById('daily-profit-date');
+    const listEl = document.getElementById('daily-profit-list');
+    if (!dateInput || !listEl) return;
+    const date = dateInput.value;
+    if (!date) { listEl.innerHTML = ''; document.getElementById('daily-profit-count').textContent = 0; document.getElementById('daily-profit-total').textContent = '฿0'; return; }
+    const soldThatDay = allItems.filter(it => it.sold_price && it.sold_at === date);
+    const rows = soldThatDay.map(it => {
+      const cost = Number(it.total_cost || 0);
+      const price = Number(it.sold_price || 0);
+      return { it, profit: price - cost };
+    }).sort((a, b) => b.profit - a.profit);
+    const total = rows.reduce((s, r) => s + r.profit, 0);
+    document.getElementById('daily-profit-count').textContent = rows.length;
+    document.getElementById('daily-profit-total').textContent = money(total) + ' บาท';
+    listEl.innerHTML = rows.length ? rows.map(r => `
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #e5e7eb;font-size:13px;">
+        <span>${r.it.brand || ''} ${r.it.model || ''} <span style="color:#6b7280;">(${r.it.id})</span></span>
+        <strong style="color:${r.profit >= 0 ? '#166534' : '#991b1b'};">${money(r.profit)}</strong>
+      </div>`).join('') : '<div style="font-size:13px;color:#6b7280;padding:8px 0;">ไม่มีการขายในวันที่เลือก</div>';
+  }
+
+  /******** BEST SELLERS ********/
+  let bsSort = 'qty';
+  function renderBestSellers() {
+    const tbody = document.getElementById('bs-tbody');
+    if (!tbody) return;
+    const marginInput = document.getElementById('bs-margin');
+    const marginPct = parseFloat(marginInput.value) || 0;
+    const sold = allItems.filter(it => it.sold_price);
+    const groups = {};
+    sold.forEach(it => {
+      const key = `${it.brand || ''} ${it.model || ''}`.trim() || 'ไม่ระบุ';
+      const cost = Number(it.total_cost || 0);
+      const base = Number(it.base_cost || 0);
+      const price = Number(it.sold_price || 0);
+      if (!groups[key]) groups[key] = { name: key, count: 0, revenue: 0, cost: 0, base: 0 };
+      const g = groups[key];
+      g.count++;
+      g.revenue += price;
+      g.cost += cost;
+      g.base += base;
+    });
+    let rows = Object.values(groups).map(g => {
+      const profit = g.revenue - g.cost;
+      const avgSale = g.revenue / g.count;
+      const avgCost = g.cost / g.count;
+      const avgBase = g.base / g.count;
+      const avgExtra = avgCost - avgBase;
+      const avgProfit = profit / g.count;
+      // Max buy-back price that still hits the target margin: sale price
+      // minus extra costs on top of the purchase price (repair/other), minus
+      // the target profit slice of the sale price.
+      const suggestedBuy = Math.max(0, avgSale * (1 - marginPct / 100) - avgExtra);
+      return Object.assign(g, { profit, avgSale, avgCost, avgBase, avgExtra, avgProfit, suggestedBuy });
+    });
+    rows.sort((a, b) => bsSort === 'profit' ? (b.profit - a.profit) : (b.count - a.count));
+    tbody.innerHTML = rows.length ? rows.map(g => `
+      <tr>
+        <td><strong>${g.name}</strong></td>
+        <td>${g.count}</td>
+        <td>${money(g.avgSale)}</td>
+        <td>${money(g.avgBase)}</td>
+        <td>${money(g.avgExtra)}</td>
+        <td style="color:${g.avgProfit >= 0 ? 'green' : 'red'};">${money(g.avgProfit)}</td>
+        <td style="color:${g.profit >= 0 ? 'green' : 'red'};">${money(g.profit)}</td>
+        <td><strong style="color:#166534;">${money(g.suggestedBuy)}</strong></td>
+      </tr>`).join('') : '<tr><td colspan="8">ยังไม่มีประวัติการขาย</td></tr>';
+  }
+  document.getElementById('bs-margin').addEventListener('input', () => {
+    localStorage.setItem('cfb_targetMargin', document.getElementById('bs-margin').value);
+    renderBestSellers();
+  });
+  document.querySelectorAll('#bs-sort-tabs button').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.filter-tabs button').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('#bs-sort-tabs button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      bsSort = btn.dataset.bsSort;
+      renderBestSellers();
+    });
+  });
+  document.getElementById('daily-profit-date').addEventListener('change', renderDailyProfit);
+
+  document.querySelectorAll('#inv-filter-tabs button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#inv-filter-tabs button').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       currentFilter = btn.dataset.filter;
       renderInventory();
@@ -1891,6 +2028,8 @@
   document.getElementById('pur-date').value = today;
   document.getElementById('inv-received-at').value = today;
   document.getElementById('loan-date').value = today;
+  document.getElementById('daily-profit-date').value = today;
+  document.getElementById('bs-margin').value = localStorage.getItem('cfb_targetMargin') || 20;
 
   // INITIAL LOAD
   (async function init() {
