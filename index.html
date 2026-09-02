@@ -673,6 +673,25 @@
       </table>
     </div>
   </div>
+
+  <div class="card">
+    <h2>ช่วงเวลาขายดีที่สุด (ต้นเดือน / กลางเดือน / ปลายเดือน)</h2>
+    <p style="font-size:13px;color:#6b7280;">ต้นเดือน = วันที่ 1-10, กลางเดือน = วันที่ 11-20, ปลายเดือน = วันที่ 21 เป็นต้นไป (รวมทุกเดือนในอดีต)</p>
+    <canvas id="chart-monthperiod-sales"></canvas>
+    <div id="monthperiod-best-summary" style="margin-top:12px;padding:10px;background:#dcfce7;border-radius:8px;font-size:14px;color:#166534;"></div>
+    <div style="max-height:220px;overflow:auto;margin-top:12px;">
+      <table>
+        <thead>
+          <tr>
+            <th>ช่วงเวลา</th>
+            <th>จำนวนที่ขาย (ชิ้น)</th>
+            <th>ยอดขายรวม (บาท)</th>
+          </tr>
+        </thead>
+        <tbody id="monthperiod-tbody"></tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <!-- ANALYSIS: BEST SELLERS & SUGGESTED BUY PRICE -->
@@ -1278,6 +1297,7 @@
       if (page === 'monthly') {
         renderMonthlySales();
         renderWeekdaySales();
+        renderMonthPeriodSales();
       }
     });
   });
@@ -1580,6 +1600,67 @@
     });
   }
 
+  /******** BEST SELLING PERIOD OF MONTH ********/
+  const MONTHPERIOD_LABELS = ['ต้นเดือน (1-10)', 'กลางเดือน (11-20)', 'ปลายเดือน (21+)'];
+  let monthPeriodChart;
+
+  function renderMonthPeriodSales() {
+    const stats = [0, 1, 2].map(() => ({ count: 0, revenue: 0 }));
+    allItems.forEach(it => {
+      if (!it.sold_price || !it.sold_at) return;
+      const dateStr = toBangkokDateStr(it.sold_at);
+      if (!dateStr) return;
+      const day = Number(dateStr.slice(8, 10));
+      const periodIdx = day <= 10 ? 0 : (day <= 20 ? 1 : 2);
+      const sold = Number(it.sold_price || 0);
+      stats[periodIdx].count++;
+      stats[periodIdx].revenue += sold;
+    });
+
+    let bestIdx = 0;
+    stats.forEach((s, idx) => { if (s.count > stats[bestIdx].count) bestIdx = idx; });
+
+    const ctx = document.getElementById('chart-monthperiod-sales').getContext('2d');
+    if (monthPeriodChart) monthPeriodChart.destroy();
+    monthPeriodChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: MONTHPERIOD_LABELS,
+        datasets: [{
+          label: 'จำนวนที่ขาย (ชิ้น)',
+          data: stats.map(s => s.count),
+          backgroundColor: stats.map((_, idx) => idx === bestIdx ? 'rgba(245, 158, 11, 0.7)' : 'rgba(34, 197, 94, 0.6)'),
+          borderColor: stats.map((_, idx) => idx === bestIdx ? '#f59e0b' : '#22c55e'),
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: { y: { beginAtZero: true } },
+        plugins: { legend: { display: false } }
+      }
+    });
+
+    const summary = document.getElementById('monthperiod-best-summary');
+    if (stats[bestIdx].count === 0) {
+      summary.textContent = 'ยังไม่มีประวัติการขาย';
+    } else {
+      summary.innerHTML = `🏆 <strong>ช่วงที่ขายดีที่สุดคือ${MONTHPERIOD_LABELS[bestIdx]}</strong> — ขายได้ ${stats[bestIdx].count} ชิ้น รวม ${money(stats[bestIdx].revenue)} บาท`;
+    }
+
+    const tbody = document.getElementById('monthperiod-tbody');
+    tbody.innerHTML = '';
+    MONTHPERIOD_LABELS.forEach((label, idx) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${idx === bestIdx ? '🏆 ' : ''}${label}</td>
+        <td>${stats[idx].count}</td>
+        <td>${money(stats[idx].revenue)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
   /******** ANALYSIS: BEST SELLERS & SUGGESTED BUY PRICE ********/
   let bestSellersChart;
 
@@ -1695,6 +1776,7 @@
       renderYearlySales();
       renderMonthlySales();
       renderWeekdaySales();
+      renderMonthPeriodSales();
     } catch (err) {
       tbody.innerHTML = '<tr><td colspan="12">Error: '+err.message+'</td></tr>';
       showToast('โหลดสต็อกไม่สำเร็จ', true);
