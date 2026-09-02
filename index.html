@@ -342,6 +342,7 @@
   <div class="nav">
     <button data-page="dashboard" class="active">Dashboard</button>
     <button data-page="daily">กำไรรายวัน</button>
+    <button data-page="analysis">วิเคราะห์ & แนะนำราคา</button>
     <button data-page="inventory">สต็อก</button>
     <button data-page="sales">ขาย</button>
     <button data-page="purchases">ซื้อของเข้า</button>
@@ -617,6 +618,55 @@
           </tr>
         </thead>
         <tbody id="daily-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ANALYSIS: BEST SELLERS & SUGGESTED BUY PRICE -->
+<div id="page-analysis" class="page" style="display:none;">
+  <div class="card">
+    <h2>สินค้าขายดีที่สุด</h2>
+    <div class="row" style="align-items:flex-end;">
+      <div class="col-4">
+        <label>เรียงตาม
+          <select id="analysis-sort">
+            <option value="count">จำนวนที่ขาย (ขายดีสุด)</option>
+            <option value="profit">กำไรรวม</option>
+            <option value="revenue">ยอดขายรวม</option>
+          </select>
+        </label>
+      </div>
+    </div>
+    <canvas id="chart-best-sellers" style="margin-top:12px;max-height:320px;"></canvas>
+  </div>
+
+  <div class="card">
+    <h2>แนะนำราคาที่ควรซื้อ</h2>
+    <p style="font-size:13px;color:#6b7280;">คำนวณจากประวัติการขายจริงของแต่ละรุ่น: ยอดขายเฉลี่ย, ต้นทุนเฉลี่ย และค่าซ่อม/ค่าอื่นๆ เฉลี่ย เพื่อแนะนำว่าควรรับซื้อ (ต้นทุนตัวเครื่องก่อนซ่อม) ไม่เกินเท่าไหร่ ถึงจะได้กำไรตามเป้า</p>
+    <div class="row" style="align-items:flex-end;">
+      <div class="col-4">
+        <label>กำไรขั้นต่ำที่ต้องการ (% ของราคาขาย)
+          <input id="analysis-target-margin" type="number" step="1" value="20" />
+        </label>
+      </div>
+    </div>
+
+    <div style="max-height:420px;overflow:auto;margin-top:12px;">
+      <table>
+        <thead>
+          <tr>
+            <th>รุ่น</th>
+            <th>จำนวนที่ขาย</th>
+            <th>ยอดขายเฉลี่ย</th>
+            <th>ต้นทุนรวมเฉลี่ย</th>
+            <th>กำไรเฉลี่ย</th>
+            <th>% กำไรเฉลี่ย</th>
+            <th>ค่าซ่อม+อื่นๆ เฉลี่ย</th>
+            <th>ควรซื้อไม่เกิน (บาท)</th>
+          </tr>
+        </thead>
+        <tbody id="analysis-tbody"></tbody>
       </table>
     </div>
   </div>
@@ -1170,6 +1220,9 @@
       if (page === 'daily') {
         renderDailyProfit();
       }
+      if (page === 'analysis') {
+        renderAnalysis();
+      }
     });
   });
 
@@ -1290,6 +1343,107 @@
     renderDailyProfit();
   });
 
+  /******** ANALYSIS: BEST SELLERS & SUGGESTED BUY PRICE ********/
+  let bestSellersChart;
+
+  function computeModelStats() {
+    const map = {};
+    allItems.forEach(it => {
+      if (!it.sold_price) return;
+      const key = `${String(it.brand || '').trim()} ${String(it.model || '').trim()}`.trim() || 'ไม่ระบุรุ่น';
+      if (!map[key]) map[key] = { count: 0, revenue: 0, cost: 0, repairOther: 0 };
+      const m = map[key];
+      const sold = Number(it.sold_price || 0);
+      const cost = Number(it.total_cost || 0);
+      const repairOther = Number(it.repair_cost || 0) + Number(it.other_cost || 0);
+      m.count++;
+      m.revenue += sold;
+      m.cost += cost;
+      m.repairOther += repairOther;
+    });
+
+    return Object.entries(map).map(([key, m]) => {
+      const avgRevenue = m.revenue / m.count;
+      const avgCost = m.cost / m.count;
+      const avgRepairOther = m.repairOther / m.count;
+      const avgProfit = avgRevenue - avgCost;
+      return {
+        key,
+        count: m.count,
+        revenue: m.revenue,
+        profit: m.revenue - m.cost,
+        avgRevenue,
+        avgCost,
+        avgProfit,
+        avgMarginPct: avgRevenue > 0 ? (avgProfit / avgRevenue * 100) : 0,
+        avgRepairOther
+      };
+    });
+  }
+
+  function renderAnalysis() {
+    const stats = computeModelStats();
+    const sortBy = document.getElementById('analysis-sort').value;
+    const targetMarginPct = Number(document.getElementById('analysis-target-margin').value || 0);
+
+    const sortKeyMap = { count: 'count', profit: 'profit', revenue: 'revenue' };
+    const sorted = stats.slice().sort((a, b) => b[sortKeyMap[sortBy]] - a[sortKeyMap[sortBy]]);
+
+    // Chart: top 10
+    const top10 = sorted.slice(0, 10);
+    const ctx = document.getElementById('chart-best-sellers').getContext('2d');
+    if (bestSellersChart) bestSellersChart.destroy();
+    const chartLabel = sortBy === 'count' ? 'จำนวนที่ขาย (ชิ้น)' : (sortBy === 'profit' ? 'กำไรรวม (บาท)' : 'ยอดขายรวม (บาท)');
+    const chartData = top10.map(s => sortBy === 'count' ? s.count : (sortBy === 'profit' ? s.profit : s.revenue));
+    bestSellersChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: top10.map(s => s.key),
+        datasets: [{
+          label: chartLabel,
+          data: chartData,
+          backgroundColor: 'rgba(34, 197, 94, 0.6)',
+          borderColor: '#22c55e',
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        indexAxis: 'y',
+        scales: { x: { beginAtZero: true } },
+        plugins: { legend: { display: false } }
+      }
+    });
+
+    // Table: suggested purchase price, sorted by best-selling (count) first
+    const tbody = document.getElementById('analysis-tbody');
+    tbody.innerHTML = '';
+    if (stats.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8">ยังไม่มีประวัติการขาย</td></tr>';
+      return;
+    }
+
+    stats.slice().sort((a, b) => b.count - a.count).forEach(s => {
+      const suggestedTotalCost = s.avgRevenue * (1 - targetMarginPct / 100);
+      const suggestedBuyPrice = Math.max(0, suggestedTotalCost - s.avgRepairOther);
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${s.key}</strong></td>
+        <td>${s.count}</td>
+        <td>${money(s.avgRevenue)}</td>
+        <td>${money(s.avgCost)}</td>
+        <td style="color:${s.avgProfit>0?'green':(s.avgProfit<0?'red':'#555')}">${money(s.avgProfit)}</td>
+        <td>${s.avgMarginPct.toFixed(1)}%</td>
+        <td>${money(s.avgRepairOther)}</td>
+        <td><strong>${money(suggestedBuyPrice)}</strong></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  document.getElementById('analysis-sort').addEventListener('change', renderAnalysis);
+  document.getElementById('analysis-target-margin').addEventListener('input', renderAnalysis);
+
   /******** INVENTORY ********/
   async function loadInventory() {
     const tbody = document.getElementById('inv-tbody');
@@ -1300,6 +1454,7 @@
       allItems = res.data || [];
       renderInventory();
       renderDailyProfit();
+      renderAnalysis();
     } catch (err) {
       tbody.innerHTML = '<tr><td colspan="12">Error: '+err.message+'</td></tr>';
       showToast('โหลดสต็อกไม่สำเร็จ', true);
