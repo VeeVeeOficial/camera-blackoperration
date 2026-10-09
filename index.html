@@ -31,6 +31,7 @@
     .nav {
       display: flex;
       gap: 8px;
+      flex-wrap: wrap;
     }
     .nav button {
       background: transparent;
@@ -160,6 +161,9 @@
     .tag.sold { background:#e0f2fe; color:#075985; }
     .tag.returned { background:#fecaca; color:#991b1b; }
     .tag.returned-seller { background:#fde047; color:#854d0e; }
+    .tag.cat-camera { background:#dbeafe; color:#1e40af; }
+    .tag.cat-lens { background:#ede9fe; color:#5b21b6; }
+    .tag.cat-other { background:#f3f4f6; color:#374151; }
 
     .stat-grid {
       display: grid;
@@ -330,10 +334,19 @@
 
     @media (max-width: 768px) {
       .col-3, .col-4, .col-6 { flex: 0 0 100%; }
+      header { flex-direction: column; align-items: flex-start; gap: 8px; }
       header h1 { font-size: 16px; }
       .toast { right: 10px; left: 10px; max-width: none; }
       .modal-content { width: 95%; padding: 16px; }
     }
+    .search-box { position: relative; }
+    .search-box input { padding-right: 30px; font-size: 14px; padding-top: 8px; padding-bottom: 8px; }
+    .search-box input::-webkit-search-cancel-button { display: none; }
+    .search-clear {
+      position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+      background: none; color: #9ca3af; font-size: 18px; padding: 2px 8px; display: none;
+    }
+    .search-box.has-text .search-clear { display: inline-flex; }
   </style>
 </head>
 <body>
@@ -341,6 +354,7 @@
   <h1>📷 Camera Flip Backend</h1>
   <div class="nav">
     <button data-page="dashboard" class="active">Dashboard</button>
+    <button data-page="income">ตรวจสอบรายได้</button>
     <button data-page="daily">กำไรรายวัน</button>
     <button data-page="monthly">ยอดขายรายเดือน</button>
     <button data-page="analysis">วิเคราะห์ & แนะนำราคา</button>
@@ -366,7 +380,6 @@
       <input type="hidden" id="edit-item-id">
       <label>Status
         <select id="edit-status">
-          <option value="รอเช็ค">รอเช็ค</option>
           <option value="รอซ่อม">รอซ่อม</option>
           <option value="พร้อมขาย">พร้อมขาย</option>
           <option value="ขายแล้ว">ขายแล้ว</option>
@@ -408,7 +421,7 @@
       </label>
       <label>สถานะหลังคืน
         <select id="return-cust-new-status">
-          <option value="รอเช็ค">รอเช็ค</option>
+          <option value="พร้อมขาย">พร้อมขาย</option>
           <option value="รอซ่อม">รอซ่อม</option>
           <option value="คืนลูกค้า">คืนลูกค้า (ไม่ใช้ต่อ)</option>
         </select>
@@ -582,6 +595,123 @@
           </tr>
         </thead>
         <tbody id="yearly-sales-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- INCOME CHECK (NEW) -->
+<div id="page-income" class="page" style="display:none;">
+  <div class="card">
+    <h2>📋 ขายอะไรไปบ้างในวันที่เลือก</h2>
+    <div class="row" style="align-items:flex-end;">
+      <div class="col-3">
+        <label>เลือกวันที่
+          <input id="income-date" type="date" />
+        </label>
+      </div>
+      <div class="col-3">
+        <button class="btn-outline" id="btn-income-today" style="margin-top:3px;">วันนี้</button>
+        <button class="btn-outline" id="btn-income-yesterday" style="margin-top:3px;">เมื่อวาน</button>
+      </div>
+      <div class="col-6">
+        <label>🔎 ค้นหา (มีผลทั้งหน้า: รายวัน / รายเดือน / รุ่น)
+          <div class="search-box">
+            <input id="income-search" type="search" placeholder="พิมพ์ ID / ยี่ห้อ / รุ่น / SN เช่น A7III, 24-70" autocomplete="off" />
+            <button type="button" class="search-clear" data-target="income-search" aria-label="ล้าง">&times;</button>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <div class="stat-grid" style="margin-top:12px;">
+      <div class="stat-card">
+        <div class="stat-label">📷 กล้องที่ขายได้</div>
+        <div class="stat-value" id="income-day-camera">-</div>
+        <div class="stat-sub">ตัว</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">🔭 เลนส์ที่ขายได้</div>
+        <div class="stat-value" id="income-day-lens">-</div>
+        <div class="stat-sub">ตัว</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">อื่นๆ (แฟลช/อุปกรณ์)</div>
+        <div class="stat-value" id="income-day-other">-</div>
+        <div class="stat-sub">ชิ้น</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">รายได้ (ยอดขาย)</div>
+        <div class="stat-value" id="income-day-revenue">-</div>
+        <div class="stat-sub">บาท</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">กำไร</div>
+        <div class="stat-value" id="income-day-profit">-</div>
+        <div class="stat-sub">บาท</div>
+      </div>
+    </div>
+
+    <div style="max-height:420px;overflow:auto;margin-top:12px;">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>หมวด</th>
+            <th>สินค้า</th>
+            <th>SN</th>
+            <th>ต้นทุน</th>
+            <th>ขายจริง</th>
+            <th>กำไร</th>
+          </tr>
+        </thead>
+        <tbody id="income-day-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>📊 จำนวนที่ขายได้ต่อเดือน (แยกกล้อง / เลนส์)</h2>
+    <canvas id="chart-income-monthly"></canvas>
+    <div style="max-height:360px;overflow:auto;margin-top:12px;">
+      <table>
+        <thead>
+          <tr>
+            <th>เดือน</th>
+            <th>📷 กล้อง (ตัว)</th>
+            <th>🔭 เลนส์ (ตัว)</th>
+            <th>อื่นๆ (ชิ้น)</th>
+            <th>รวม</th>
+            <th>ยอดขาย (บาท)</th>
+            <th>กำไร (บาท)</th>
+          </tr>
+        </thead>
+        <tbody id="income-month-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>🔍 รุ่นที่ขายได้ในเดือนที่เลือก</h2>
+    <div class="row">
+      <div class="col-3">
+        <label>เลือกเดือน
+          <input id="income-month" type="month" />
+        </label>
+      </div>
+    </div>
+    <div style="max-height:360px;overflow:auto;margin-top:12px;">
+      <table>
+        <thead>
+          <tr>
+            <th>หมวด</th>
+            <th>รุ่น</th>
+            <th>จำนวน</th>
+            <th>ยอดขายรวม (บาท)</th>
+            <th>กำไรรวม (บาท)</th>
+          </tr>
+        </thead>
+        <tbody id="income-model-tbody"></tbody>
       </table>
     </div>
   </div>
@@ -782,8 +912,7 @@
       <div class="col-3">
         <label>Status
           <select id="inv-status">
-            <option value="รอเช็ค">รอเช็ค</option>
-            <option value="รอซ่อม">รอซ่อม</option>
+              <option value="รอซ่อม">รอซ่อม</option>
             <option value="พร้อมขาย">พร้อมขาย</option>
           </select>
         </label>
@@ -836,6 +965,15 @@
       <button data-filter="returned-seller">คืนผู้ขาย</button>
       <button data-filter="all">ทั้งหมด</button>
     </div>
+
+    <div class="search-box" style="margin-bottom:10px;">
+      <input id="inv-search" type="search" placeholder="🔎 ค้นหา ID / ยี่ห้อ / รุ่น / SN / สภาพ / สถานะ..." autocomplete="off" />
+      <button type="button" class="search-clear" data-target="inv-search" aria-label="ล้าง">&times;</button>
+    </div>
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:-4px 0 10px;">
+      <input id="inv-search-all" type="checkbox" style="width:auto;margin:0;" checked />
+      ค้นหาในทุกแท็บ (ไม่สนแท็บที่เลือก)
+    </label>
 
     <div id="inv-summary" style="font-size:13px;margin-bottom:8px;"></div>
     <div style="max-height:420px;overflow:auto;">
@@ -1253,6 +1391,11 @@
     return res.json();
   }
 
+  // "รอเช็ค" ถูกยกเลิกแล้ว — ของเก่าที่เป็นรอเช็คให้ถือว่าเป็นพร้อมขาย
+  function normStatus(st) {
+    return String(st || '').trim() === 'รอเช็ค' ? 'พร้อมขาย' : (st || '');
+  }
+
   function money(n) {
     const num = Number(n || 0);
     if (isNaN(num)) return '-';
@@ -1288,6 +1431,9 @@
       btn.classList.add('active');
       document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
       document.getElementById('page-' + page).style.display = 'block';
+      if (page === 'income') {
+        renderIncome();
+      }
       if (page === 'daily') {
         renderDailyProfit();
       }
@@ -1409,14 +1555,230 @@
 
   document.getElementById('daily-date').addEventListener('change', renderDailyProfit);
   document.getElementById('btn-daily-today').addEventListener('click', () => {
-    document.getElementById('daily-date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('daily-date').value = toBangkokDateStr(new Date());
     renderDailyProfit();
   });
   document.getElementById('btn-daily-yesterday').addEventListener('click', () => {
     const d = new Date();
     d.setDate(d.getDate() - 1);
-    document.getElementById('daily-date').value = d.toISOString().split('T')[0];
+    document.getElementById('daily-date').value = toBangkokDateStr(d);
     renderDailyProfit();
+  });
+
+  /******** INCOME CHECK (NEW) ********/
+  let incomeMonthlyChart;
+  const CAT_LABEL = { camera: '📷 กล้อง', lens: '🔭 เลนส์', other: 'อื่นๆ' };
+  const CAT_ORDER = { camera: 0, lens: 1, other: 2 };
+
+  // แยกหมวดจาก category: Camera Body = กล้อง, Lens = เลนส์, ที่เหลือ = อื่นๆ
+  function catGroup(category) {
+    const c = String(category || '').toLowerCase();
+    if (c.includes('camera') || c.includes('body') || c.includes('กล้อง')) return 'camera';
+    if (c.includes('lens') || c.includes('เลนส์')) return 'lens';
+    return 'other';
+  }
+
+  // ค้นหาแบบหลายคำ: ทุกคำต้องเจอ (ไม่สนตัวพิมพ์เล็ก/ใหญ่ เว้นวรรค และขีด)
+  function normSearch(s) {
+    return String(s || '').toLowerCase().replace(/[\s\-_/]+/g, '');
+  }
+  function matchSearch(it, query) {
+    const words = String(query || '').toLowerCase().trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return true;
+    const hay = [it.id, it.category, it.brand, it.model, it.sn, it.condition, it.status].join(' ').toLowerCase();
+    const hayNorm = normSearch(hay);
+    return words.every(w => hay.includes(w) || hayNorm.includes(normSearch(w)));
+  }
+
+  function soldItemsOnly() {
+    const q = document.getElementById('income-search').value;
+    return allItems.filter(it => it.sold_price && it.sold_at && !String(it.status || '').includes('คืน') && matchSearch(it, q));
+  }
+
+  function renderIncome() {
+    renderIncomeDay();
+    renderIncomeMonthly();
+    renderIncomeModels();
+  }
+
+  function renderIncomeDay() {
+    const date = document.getElementById('income-date').value;
+    const tbody = document.getElementById('income-day-tbody');
+    const list = soldItemsOnly().filter(it => toBangkokDateStr(it.sold_at) === date);
+
+    list.sort((a, b) =>
+      CAT_ORDER[catGroup(a.category)] - CAT_ORDER[catGroup(b.category)] ||
+      Number(b.sold_price || 0) - Number(a.sold_price || 0)
+    );
+
+    const count = { camera: 0, lens: 0, other: 0 };
+    let revenue = 0, cost = 0;
+    tbody.innerHTML = '';
+
+    if (list.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7">ไม่มีรายการขายในวันที่เลือก</td></tr>';
+    }
+
+    list.forEach(it => {
+      const g = catGroup(it.category);
+      const c = Number(it.total_cost || 0);
+      const s = Number(it.sold_price || 0);
+      const p = s - c;
+      count[g]++;
+      revenue += s;
+      cost += c;
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${it.id}</td>
+        <td><span class="tag cat-${g}">${CAT_LABEL[g]}</span></td>
+        <td><strong>${it.brand || ''} ${it.model || ''}</strong></td>
+        <td>${it.sn || ''}</td>
+        <td>${money(c)}</td>
+        <td>${money(s)}</td>
+        <td style="color:${p>0?'green':(p<0?'red':'#555')}">${money(p)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById('income-day-camera').textContent = count.camera;
+    document.getElementById('income-day-lens').textContent = count.lens;
+    document.getElementById('income-day-other').textContent = count.other;
+    document.getElementById('income-day-revenue').textContent = money(revenue);
+    document.getElementById('income-day-profit').textContent = money(revenue - cost);
+  }
+
+  function renderIncomeMonthly() {
+    const map = {};
+    soldItemsOnly().forEach(it => {
+      const month = toBangkokDateStr(it.sold_at).slice(0, 7);
+      if (!month) return;
+      if (!map[month]) map[month] = { camera: 0, lens: 0, other: 0, revenue: 0, profit: 0 };
+      const m = map[month];
+      const s = Number(it.sold_price || 0);
+      m[catGroup(it.category)]++;
+      m.revenue += s;
+      m.profit += s - Number(it.total_cost || 0);
+    });
+
+    const months = Object.keys(map).sort();
+
+    const ctx = document.getElementById('chart-income-monthly').getContext('2d');
+    if (incomeMonthlyChart) incomeMonthlyChart.destroy();
+    incomeMonthlyChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: months,
+        datasets: [
+          { label: 'กล้อง (ตัว)', data: months.map(m => map[m].camera), backgroundColor: 'rgba(59, 130, 246, 0.7)' },
+          { label: 'เลนส์ (ตัว)', data: months.map(m => map[m].lens), backgroundColor: 'rgba(139, 92, 246, 0.7)' },
+          { label: 'อื่นๆ (ชิ้น)', data: months.map(m => map[m].other), backgroundColor: 'rgba(156, 163, 175, 0.7)' }
+        ]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          x: { stacked: true },
+          y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } }
+        }
+      }
+    });
+
+    const tbody = document.getElementById('income-month-tbody');
+    tbody.innerHTML = '';
+    if (months.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7">ยังไม่มีประวัติการขาย</td></tr>';
+      return;
+    }
+    months.slice().reverse().forEach(month => {
+      const m = map[month];
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${month}</strong></td>
+        <td>${m.camera}</td>
+        <td>${m.lens}</td>
+        <td>${m.other}</td>
+        <td><strong>${m.camera + m.lens + m.other}</strong></td>
+        <td>${money(m.revenue)}</td>
+        <td style="color:${m.profit>0?'green':(m.profit<0?'red':'#555')}">${money(m.profit)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderIncomeModels() {
+    const month = document.getElementById('income-month').value;
+    const tbody = document.getElementById('income-model-tbody');
+    const map = {};
+
+    soldItemsOnly().forEach(it => {
+      if (toBangkokDateStr(it.sold_at).slice(0, 7) !== month) return;
+      const g = catGroup(it.category);
+      const name = `${String(it.brand || '').trim()} ${String(it.model || '').trim()}`.trim() || 'ไม่ระบุรุ่น';
+      const key = g + '|' + name;
+      if (!map[key]) map[key] = { g, name, count: 0, revenue: 0, profit: 0 };
+      const s = Number(it.sold_price || 0);
+      map[key].count++;
+      map[key].revenue += s;
+      map[key].profit += s - Number(it.total_cost || 0);
+    });
+
+    const rows = Object.values(map).sort((a, b) => CAT_ORDER[a.g] - CAT_ORDER[b.g] || b.count - a.count);
+    tbody.innerHTML = '';
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5">ไม่มีรายการขายในเดือนที่เลือก</td></tr>';
+      return;
+    }
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><span class="tag cat-${r.g}">${CAT_LABEL[r.g]}</span></td>
+        <td><strong>${r.name}</strong></td>
+        <td>${r.count}</td>
+        <td>${money(r.revenue)}</td>
+        <td style="color:${r.profit>0?'green':(r.profit<0?'red':'#555')}">${money(r.profit)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  /******** SEARCH ********/
+  function debounce(fn, ms) {
+    let t;
+    return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+  }
+  function syncClearBtn(input) {
+    input.parentElement.classList.toggle('has-text', !!input.value);
+  }
+  const SEARCH_RENDER = { 'income-search': () => renderIncome(), 'inv-search': () => renderInventory() };
+  Object.entries(SEARCH_RENDER).forEach(([id, fn]) => {
+    const input = document.getElementById(id);
+    const run = debounce(fn, 150);
+    input.addEventListener('input', () => { syncClearBtn(input); run(); });
+    input.addEventListener('keydown', e => { if (e.key === 'Escape') { input.value = ''; syncClearBtn(input); fn(); } });
+  });
+  document.querySelectorAll('.search-clear').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const input = document.getElementById(btn.dataset.target);
+      input.value = '';
+      syncClearBtn(input);
+      SEARCH_RENDER[btn.dataset.target]();
+      input.focus();
+    });
+  });
+  document.getElementById('inv-search-all').addEventListener('change', () => renderInventory());
+
+  document.getElementById('income-date').addEventListener('change', renderIncomeDay);
+  document.getElementById('income-month').addEventListener('change', renderIncomeModels);
+  document.getElementById('btn-income-today').addEventListener('click', () => {
+    document.getElementById('income-date').value = toBangkokDateStr(new Date());
+    renderIncomeDay();
+  });
+  document.getElementById('btn-income-yesterday').addEventListener('click', () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    document.getElementById('income-date').value = toBangkokDateStr(d);
+    renderIncomeDay();
   });
 
   /******** YEARLY SALES & VAT THRESHOLD ********/
@@ -1769,8 +2131,9 @@
     try {
       const res = await apiGet({action:'listItems'});
       if (!res.ok) throw new Error(res.error || 'error');
-      allItems = res.data || [];
+      allItems = (res.data || []).map(it => ({ ...it, status: normStatus(it.status) }));
       renderInventory();
+      renderIncome();
       renderDailyProfit();
       renderAnalysis();
       renderYearlySales();
@@ -1786,8 +2149,13 @@
   function renderInventory() {
     const tbody = document.getElementById('inv-tbody');
 
-    let filteredItems = allItems;
-    if (currentFilter === 'available') {
+    const invQuery = document.getElementById('inv-search').value.trim();
+    const searchAll = invQuery && document.getElementById('inv-search-all').checked;
+
+    let filteredItems = allItems.slice();
+    if (searchAll) {
+      // ค้นหาทุกแท็บ
+    } else if (currentFilter === 'available') {
       filteredItems = allItems.filter(it => !it.sold_price && it.status === 'พร้อมขาย');
     } else if (currentFilter === 'sold') {
       filteredItems = allItems.filter(it => it.sold_price && !it.status?.includes('คืน'));
@@ -1798,6 +2166,8 @@
     } else if (currentFilter === 'returned-seller') {
       filteredItems = allItems.filter(it => it.status && it.status.includes('คืนผู้ขาย'));
     }
+
+    if (invQuery) filteredItems = filteredItems.filter(it => matchSearch(it, invQuery));
 
     filteredItems.sort((a, b) => {
       const dateA = a.received_at || '';
@@ -1849,6 +2219,7 @@
     });
 
     document.getElementById('inv-summary').innerHTML =
+      (invQuery ? `🔎 ผลค้นหา "<strong>${invQuery.replace(/</g,'&lt;')}</strong>"${searchAll ? ' (ทุกแท็บ)' : ''} — ` : '') +
       `แสดง <strong>${filteredItems.length}</strong> รายการ | ของค้างสต็อก <strong>${stockCount}</strong> ชิ้น | มูลค่าต้นทุน <strong>${money(stockValue)}</strong> บาท | กำไรจากของที่ขายแล้ว <strong>${money(profitTotal)}</strong> บาท`;
   }
 
@@ -1910,7 +2281,7 @@
       }
       currentEditItem = res.data;
       document.getElementById('edit-item-id').value = currentEditItem.id;
-      document.getElementById('edit-status').value = currentEditItem.status || '';
+      document.getElementById('edit-status').value = normStatus(currentEditItem.status);
       document.getElementById('edit-sold-price').value = currentEditItem.sold_price || '';
       document.getElementById('edit-sold-at').value = currentEditItem.sold_at || '';
       openModal('modal-edit-item');
@@ -1951,8 +2322,8 @@
       document.getElementById('return-cust-item-name').textContent = `${currentEditItem.brand} ${currentEditItem.model} (${currentEditItem.id})`;
       document.getElementById('return-cust-item-cost').textContent = money(currentEditItem.total_cost);
       document.getElementById('return-cust-sold-price').textContent = money(currentEditItem.sold_price);
-      document.getElementById('return-cust-date').value = new Date().toISOString().split('T')[0];
-      document.getElementById('return-cust-new-status').value = 'รอเช็ค';
+      document.getElementById('return-cust-date').value = toBangkokDateStr(new Date());
+      document.getElementById('return-cust-new-status').value = 'พร้อมขาย';
       document.getElementById('return-cust-reason').value = '';
       document.getElementById('return-cust-refund-amount').value = currentEditItem.sold_price || '';
       openModal('modal-return-customer');
@@ -2002,7 +2373,7 @@
       currentEditItem = res.data;
       document.getElementById('return-seller-item-name').textContent = `${currentEditItem.brand} ${currentEditItem.model} (${currentEditItem.id})`;
       document.getElementById('return-seller-item-cost').textContent = money(currentEditItem.total_cost);
-      document.getElementById('return-seller-date').value = new Date().toISOString().split('T')[0];
+      document.getElementById('return-seller-date').value = toBangkokDateStr(new Date());
       document.getElementById('return-seller-reason').value = '';
       document.getElementById('return-seller-refund').value = currentEditItem.total_cost || '';
       document.getElementById('return-seller-action').value = 'remove';
@@ -2504,13 +2875,15 @@
   document.getElementById('btn-rep-submit').addEventListener('click', submitRepair);
   document.getElementById('btn-loan-submit').addEventListener('click', submitLoan);
 
-  // Auto-fill today's date
-  const today = new Date().toISOString().split('T')[0];
+  // Auto-fill today's date (เวลาไทย)
+  const today = toBangkokDateStr(new Date());
   document.getElementById('sale-date').value = today;
   document.getElementById('pur-date').value = today;
   document.getElementById('inv-received-at').value = today;
   document.getElementById('loan-date').value = today;
   document.getElementById('daily-date').value = today;
+  document.getElementById('income-date').value = today;
+  document.getElementById('income-month').value = today.slice(0, 7);
 
   // INITIAL LOAD
   (async function init() {
